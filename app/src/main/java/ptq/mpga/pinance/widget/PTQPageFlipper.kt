@@ -1,17 +1,19 @@
 package ptq.mpga.pinance.widget
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -20,22 +22,25 @@ import ptq.mpga.pinance.widget.Line.Companion.k
 import ptq.mpga.pinance.widget.Line.Companion.theta
 import kotlin.math.*
 
-private const val TAG = "MPGAPageFlipper"
+private const val TAG = "PTQPageFlipper"
 
 //带ratio的要乘屏幕比例
 private const val stateTightMinWERatio = 1 / 8f //进入tight状态的最小WE长度
 private const val minTheta = ((137f * PI) / 180).toFloat() //最小θ，弧度制
 private const val stateTightDragUpThetaRate = 0.1f //tight状态向上拉扯的速率，该值越大则拉扯越快
-private const val stateTightDragRightScreenDistanceRatio = 1 / 15f //tight状态手指移到屏幕右侧多少时到达最终态
+private const val stateTightDragRightScreenDistanceRatio = 1 / 40f //tight状态手指移到屏幕右侧多少时到达最终态
 private const val maxDragXRatio = stateTightDragRightScreenDistanceRatio //手指最大X，和上个变量一样
 private const val minWxRatio = 1 / 25f //W.x的最小值
 private const val WKtoKSMax = 1f //loose状态WK:KS的最大值
 
 private const val animStartTimeout = 100 //动画在手指拖动多久后开始，此值不宜过大，会造成不准确
 private const val animEnterDuration = 100 //入动画时间，此值不宜过大，会造成不准确
-private const val animExitDuration = 100 //出动画时间
+private const val animExitDuration = animEnterDuration //出动画时间
 
 private const val tapYDeltaRatio = 1 / 170f //点击翻页时，y方向偏移，不宜过大
+
+private const val shadowThreshold = 25f //阴影1、2阈值
+private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
 
 private enum class PageState {
     loose, wMin, thetaMin, tight
@@ -45,12 +50,13 @@ private enum class State {
     idle, enterAnimStart, draggable, exitAnimStart, exitAnimPreStart
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun PTQPageFlipper(modifier: Modifier = Modifier) {
     //组件宽高和原点O
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val screenWidth = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val dragXRange = FloatRange(screenWidth * minWxRatio, screenWidth * (1 - maxDragXRatio))
+    val dragXRange = FloatRange(0f, screenWidth * (1 - maxDragXRatio))
 
     val absO = Point(0f, 0f)
     //位于组件一半高度的直线，用于处理翻转，绝对坐标系
@@ -69,8 +75,6 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
     var theta by remember { mutableStateOf(0f) }
     //fixedValue
     var f by remember { mutableStateOf(0f) }
-    //从状态1转为状态2-2的E点横坐标
-    var EmaxInMinTheta by remember { mutableStateOf(0f) }
 
     //流程状态
     var state: State by remember { mutableStateOf(State.idle) }
@@ -113,7 +117,6 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
                 time = 0L
                 theta = 0f
                 f = 0f
-                EmaxInMinTheta = 0f
                 animLastPoint = absO.copy()
                 animStartAndFinalPoint = DragEvent(absO.copy(), absO.copy())
                 animDuration = arrayOf(animEnterDuration, animExitDuration)
@@ -133,28 +136,26 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
         }
     }
 
-    val onTap = { offset: Offset ->
-        if (state == State.idle && dragXRange.contains(offset.x)) {
-            val touchPoint = offset.toPoint
-            val tapYDelta = tapYDeltaRatio * screenHeight
-            if (touchPoint.y > tapYDelta) {
-                val isRightToLeft = touchPoint.x < 0.5f * screenWidth
-                val startPoint = Point(x = if (isRightToLeft) -dragXRange.end * 0.5f else dragXRange.end, y = touchPoint.y - tapYDelta)
-                f = screenHeight - touchPoint.y.absoluteValue
-                val endPoint = Point(x = if (isRightToLeft) dragXRange.end else -dragXRange.end * 0.5f, y = touchPoint.y)
-                animLastPoint = startPoint.copy()
-                animStartAndFinalPoint = DragEvent(startPoint.copy(), endPoint.copy())
-                pageState = PageState.loose
-                animDuration = arrayOf(animEnterDuration, animEnterDuration + animExitDuration)
-                state = State.exitAnimStart
-            }
-        }
-    }
-
     Canvas(modifier = modifier
         .fillMaxSize()
         .pointerInput(Unit) {
-            detectTapGestures(onTap)
+            detectTapGestures { offset: Offset ->
+                if (state == State.idle && dragXRange.contains(offset.x)) {
+                    val touchPoint = offset.toPoint
+                    val tapYDelta = tapYDeltaRatio * screenHeight
+                    if (touchPoint.y > tapYDelta) {
+                        val isRightToLeft = touchPoint.x < 0.5f * screenWidth
+                        val startPoint = Point(x = if (isRightToLeft) -dragXRange.end * 0.5f else dragXRange.end, y = touchPoint.y - tapYDelta)
+                        f = screenHeight - touchPoint.y.absoluteValue
+                        val endPoint = Point(x = if (isRightToLeft) dragXRange.end else -dragXRange.end * 0.5f, y = touchPoint.y)
+                        animLastPoint = startPoint.copy()
+                        animStartAndFinalPoint = DragEvent(startPoint.copy(), endPoint.copy())
+                        pageState = PageState.loose
+                        animDuration = arrayOf(animEnterDuration, animEnterDuration + animExitDuration)
+                        state = State.exitAnimStart
+                    }
+                }
+            }
         }
         .pointerInput(Unit) {
             detectDragGestures(
@@ -196,7 +197,7 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
                             if (isUpToDown) {
                                 upsideDown = true
                                 f = screenHeight - f
-                                Log.d(TAG, "MPGAPageFlipper:  upsdiedown1 $upsideDown")
+                                Log.d(TAG, "PTQPageFlipper:  upsdiedown1 $upsideDown")
                             }
                             animLastPoint = animStartAndFinalPoint.originTouchPoint.copy()
                             state = State.enterAnimStart
@@ -238,41 +239,42 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
         val newAllPoints = if (dragEvent != null && !dragEvent.isUnmoved) {
             dragEvent = if (upsideDown) dragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else dragEvent
 
-            Log.d(TAG, "MPGAPageFlipper: dragEvent $dragEvent upsideDown $upsideDown")
-
             when (pageState) {
                 PageState.loose -> {
                     buildStateLoose(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f, upsideDown, state) { newState, newTheta, newEmaxInThetaMin, newUpsideDown ->
                         newUpsideDown?.let {
-                            Log.d(TAG, "MPGAPageFlipper:  upsdiedown2 $it")
+                            Log.d(TAG, "PTQPageFlipper:  upsdiedown2 $it")
                             upsideDown = it
                             f = screenHeight - f
                             return@buildStateLoose
                         }
                         newState?.let { pageState = it }
                         newTheta?.let { theta = it }
-                        newEmaxInThetaMin?.let { EmaxInMinTheta = it }
-                        Log.d(TAG, "MPGAPageFlipper: state $pageState start")
+//                        newEmaxInThetaMin?.let { EmaxInMinTheta = it }
+                        Log.d(TAG, "PTQPageFlipper: state $pageState start")
                     }
                 }
                 PageState.wMin -> {
                     buildStateWMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
                         theta = newTheta
                         pageState = newState
-                        Log.d(TAG, "MPGAPageFlipper: state $pageState start")
+                        if (newState == PageState.thetaMin) {
+//                            EmaxInMinTheta = dragXRange.end
+                        }
+                        Log.d(TAG, "PTQPageFlipper: state $pageState start")
                     }
                 }
                 PageState.thetaMin -> {
-                    buildStateThetaMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f, EmaxInMinTheta) { newState, newTheta ->
+                    buildStateThetaMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
                         theta = newTheta
                         pageState = newState
-                        Log.d(TAG, "MPGAPageFlipper: state $pageState start")
+                        Log.d(TAG, "PTQPageFlipper: state $pageState start")
                     }
                 }
                 PageState.tight -> {
                     buildStateTight(absO.copy(), Point(screenWidth, screenHeight), theta, dragEvent, f) { newState ->
                         pageState = newState
-                        Log.d(TAG, "MPGAPageFlipper: state $newState start")
+                        Log.d(TAG, "PTQPageFlipper: state $newState start")
                     }
                 }
             }
@@ -280,22 +282,44 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
             null
         }
 
-        val color = { index: Int ->
-            when (index) {
-                0 -> Color.Blue
-                1 -> Color.Green
-                2 -> Color.Yellow
-                else -> Color.Black
-            }
-        }
+//        val color = { index: Int ->
+//            when (index) {
+//                0 -> Color.Blue
+//                1 -> Color.Green
+//                2 -> Color.Yellow
+//                else -> Color.Black
+//            }
+//        }
 
         val all = newAllPoints?.apply {
             allPoints = this
         } ?: allPoints
 
-        buildPath(if (upsideDown) all.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else all).forEachIndexed { index, path ->
-            drawPath(path = path, brush = Brush.linearGradient(colorStops = arrayOf(0f to Color.Black, 1f to Color.Black)), style = Stroke(width = 5f))
+        val path = (if (upsideDown) all.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else all).buildPath()/*.forEachIndexed { index, path ->
+            drawPath(path = path, brush = Brush.linearGradient(colorStops = arrayOf(0f to Color.Black, 1f to Color.Black)), style = Stroke(width = 2.5f))
+        }*/
+
+        val blackColor = android.graphics.Color.toArgb(Color.Black.value.toLong())
+        val thisColor = android.graphics.Color.toArgb(Color.Magenta.value.toLong())
+        val thisBackColor = android.graphics.Color.toArgb(Color.White.value.toLong())
+        val nextColor = android.graphics.Color.toArgb(Color.Yellow.value.toLong())
+        drawIntoCanvas {
+            val paint = Paint()
+            val frameworkPaint = paint.asFrameworkPaint()
+            frameworkPaint.color = nextColor
+            it.drawPath(path.first[2], paint)
+            frameworkPaint.color = blackColor
+            it.drawPath(path.second[2], paint)
+            frameworkPaint.color = thisColor
+//            frameworkPaint.shader = LinearGradientShader()
+            it.drawPath(path.first[0], paint)
+            frameworkPaint.color = blackColor
+            it.drawPath(path.second[0], paint)
+            it.drawPath(path.second[1], paint)
+            frameworkPaint.color = thisBackColor
+            it.drawPath(path.first[1], paint)
         }
+
     }
 }
 
@@ -309,9 +333,11 @@ private inline fun buildStateLoose(absO: Point, dragEvent: DragEvent, absC: Poin
     val Ex = Line.withKAndOnePoint(-1 / Line.withTwoPoints(points.C, points.H).k, points.C..points.H).x(points.C.y)
     val kJH = Line.withTwoPoints(points.J, points.H).k
 
-//    Log.d(TAG, "buildStateLoose: kJH$kJH \n W.x${points.W.x} minWx${minWxRatio * points.C.x} \n theta${theta.toDeg()} \n direction${dragDirection}")
+//    Log.d(TAG, "buildStateLoose: kJH$kJH  W.x${points.W.x} minWx${minWxRatio * points.C.x} theta${theta.toDeg()} direction${dragDirection}")
 
     if (dragDirection == DragDirection.static || kJH.isNaN()) return null
+
+    //TODO: 状态转变用curTouchPoint计算
 
     if (state == State.enterAnimStart || state == State.draggable) {
         when {
@@ -335,7 +361,7 @@ private inline fun buildStateLoose(absO: Point, dragEvent: DragEvent, absC: Poin
     return points.toAbsSystem(absO)
 }
 
-//allowLeftOut:是否允许从左侧翻出去，即Wx不受限
+//allowLeftOut:是否允许从左侧翻出去，即Wx不受限，用于动画
 private fun algorithmStateLoose(absO: Point, absR: Point, absC: Point, f: Float, allowLeftOut: Boolean): Pair<Float, AllPoints> {
     val O = absO.inCoordinateSystem(absO)
     val C = absC.inCoordinateSystem(absO)
@@ -343,9 +369,6 @@ private fun algorithmStateLoose(absO: Point, absR: Point, absC: Point, f: Float,
     val B = Point(C.x, 0f)
     val R = absR.inCoordinateSystem(absO)
     val minWx = minWxRatio * C.x
-
-//    val lBCPerpendicularBisector = Line(0f, C.y / 2)
-//    val J = if (kHJ >= 0) absJ.inCoordinateSystem(absO) else absJ.inCoordinateSystem(absO).getSymmetricalPointAbout(lBCPerpendicularBisector)
 
     val Rf = Point(C.x, C.y + f)
     val k = (C.x - R.x) / (R.y - Rf.y)
@@ -393,7 +416,8 @@ private fun algorithmStateLoose(absO: Point, absR: Point, absC: Point, f: Float,
     val lWZ = Line.withKAndOnePoint(lEF.k, W)
     val Z = Point(C.x, lWZ.y(C.x))
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(O, A, B, C, H, I, J, K, M, N, S, T, U, V, W, Z)
+//    Log.d(TAG, "loose: Kx ${K.x} Wx ${W.x} E ${E.x}")
 
     return Pair(lCH.theta(), allPoints)
 }
@@ -416,7 +440,8 @@ private inline fun buildStateWMin(absO: Point, dragEvent: DragEvent, absC: Point
             changeState(PageState.loose, maxOf(minTheta, theta))
             return null
         }
-        theta < minTheta && dragDirection.isIn(DragDirection.right, DragDirection.rightDown, DragDirection.rightUp) -> {
+        //这里有问题，不能直接thetaMin，因为thetaMin的时候根据Wx计算了，但是wMin
+        theta < minTheta && dragDirection.isIn(DragDirection.right, DragDirection.up, DragDirection.rightUp, DragDirection.rightDown) -> {
             changeState(PageState.thetaMin, minTheta)
             return null
         }
@@ -462,13 +487,14 @@ private fun algorithmStateWMin(absO: Point, absTouchPoint: Point, absC: Point, f
     val M = U..S
     val N = T..V
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(O, A, B, C, H, I, J, W, M, N, S, T, U, V, W, Z)
+    Log.d(TAG, "wMin: Kx${W.x} Ex${E.x}")
 
     return Triple(lCH.theta(), E.x - W.x, allPoints)
 }
 
-private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: Point, f: Float, EmaxInThetaMin: Float, changeState: (newPageState: PageState, theta: Float) -> Unit): AllPoints? {
-    val (WE, points) = algorithmStateThetaMin(absO, dragEvent.originTouchPoint, absC, f, EmaxInThetaMin)
+private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: Point, f: Float, changeState: (newPageState: PageState, theta: Float) -> Unit): AllPoints? {
+    val (WE, points) = algorithmStateThetaMin(absO, dragEvent.originTouchPoint, absC, f)
 
     val dragEventCoordinate = dragEvent.inCoordinateSystem(absO)
     val lHF = Line.withTwoPoints(points.H, dragEventCoordinate.originTouchPoint)
@@ -477,12 +503,14 @@ private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: P
     val minWx = minWxRatio * points.C.x
     val minWE = stateTightMinWERatio * points.C.x
 
+//    Log.d(TAG, "buildStateThetaMin: W.x${points.W.x} dis:${points.H.distanceTo(dragEventCoordinate.originTouchPoint)} f:${f} dir:${dragDirection}")
+
     when {
         points.W.x <= minWx && WE <= minWE && dragDirection.isIn(DragDirection.rightUp, DragDirection.leftUp, DragDirection.up, DragDirection.right) -> {
             changeState(PageState.tight, minTheta)
             return null
         }
-        points.H.distanceTo(dragEventCoordinate.originTouchPoint) < f && dragDirection.isIn(DragDirection.left, DragDirection.leftDown, DragDirection.rightDown, DragDirection.down) -> {
+        points.H.distanceTo(dragEventCoordinate.originTouchPoint) < f && dragDirection.isIn(DragDirection.left, DragDirection.leftDown, DragDirection.rightDown, DragDirection.down, DragDirection.leftUp) -> {
             changeState(PageState.loose, minTheta)
             return null
         }
@@ -495,7 +523,7 @@ private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: P
     return points.toAbsSystem(absO)
 }
 
-private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Point, f: Float, EmaxInThetaMin: Float): Pair<Float, AllPoints> {
+private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Point, f: Float): Pair<Float, AllPoints> {
     val O = absO.inCoordinateSystem(absO)
     val C = absC.inCoordinateSystem(absO)
     val A = Point(0f, C.y)
@@ -509,16 +537,18 @@ private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Poin
 
     val G = Point(C.x, R.y + lCH.k * (C.x - R.x))
 
-    val ERange = FloatRange(minWE + minWx, EmaxInThetaMin)
-
     val E = Point(Line.withKAndOnePoint(k, R..G).x(C.y), C.y)
     val F = Point(C.x, k * (C.x - E.x) + C.y)
     val lEF = Line.withKAndOnePoint(k, E)
 
+    val Emax = C.x - f / k(minTheta - PI.toFloat() / 2) - stateTightMinWERatio * C.x
+
+    val ERange = FloatRange(minWE + minWx, maxOf(minWE + minWx, Emax))
     val maxKE = E.x - (R.x - (R.y - C.y) / k)
-    val KERange = FloatRange(minWE, maxKE)
+    val KERange = FloatRange(minWE, maxOf(minWE, maxKE))
     val KE = ERange.linearMappingWithConstraints(E.x, KERange)
     val K = Point(E.x - KE, C.y)
+    Log.d(TAG, "algorithmStateThetaMin: ERange:$ERange KERange:$KERange Kx${K.x} Ex${E.x}")
     val lKL = Line.withKAndOnePoint(k, K)
 
     val L = Point(C.x, lKL.y(C.x))
@@ -550,7 +580,9 @@ private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Poin
     val lWZ = Line.withKAndOnePoint(lEF.k, W)
     val Z = Point(C.x, lWZ.y(C.x))
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(O, A, B, C, H, I, J, K, M, N, S, T, U, V, W, Z)
+
+//    Log.d(TAG, "thetaMin: k$K E$E")
 
     return Pair(E.x - W.x, allPoints)
 }
@@ -567,8 +599,8 @@ private fun onDragWhenTightState(absO: Point, f: Float, currentTheta: Float, abs
             val delta = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
             currentTheta + delta
         }
-        //左下、下、左、左上
-        DragDirection.leftDown, DragDirection.down, DragDirection.left, DragDirection.leftUp -> {
+        //左下、下、左、左上、右下
+        DragDirection.leftDown, DragDirection.down, DragDirection.left, DragDirection.leftUp, DragDirection.rightDown -> {
             val (_, delta) = getTightStateDeltaWhenBack(absO, f, currentTheta, absDragEvent, screenWidth, screenHeight)
             currentTheta + delta
         }
@@ -578,15 +610,6 @@ private fun onDragWhenTightState(absO: Point, f: Float, currentTheta: Float, abs
             val deltaUp = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
             val yToX = -absDragEvent.dragDelta.y / absDragEvent.dragDelta.x
             currentTheta + (yToX / (1 + yToX)) * deltaUp + (1 / (1 + yToX)) * deltaRight
-        }
-        //右下
-        DragDirection.rightDown -> {
-            val (Jc, deltaDown) = getTightStateDeltaWhenBack(absO, f, currentTheta, absDragEvent, screenWidth, screenHeight)
-            currentTheta +  /*if (Jc.x !in 0f..screenWidth && Jc.y !in 0f..-screenHeight) {
-                getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
-            } else {
-                deltaDown
-            }*/ deltaDown
         }
         else -> currentTheta
     }
@@ -714,48 +737,101 @@ private fun algorithmStateTight(absO: Point, absC: Point, theta: Float): Pair<Li
     val M = U..S
     val N = V..T
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(O, A, B, C, H, I, J, W, M, N, S, T, U, V, W, Z)
 
     return Pair(lFH, allPoints)
 }
 
-private fun buildPath(absPoints: AllPoints): List<Path> {
+//绝对系，根据点计算路径，返回值第一项为页面路径，第二项为阴影路径
+private fun AllPoints.buildPath(): Pair<List<Path>, List<Path>> {
     val thisPage = Path().apply {
-        reset()
-        moveTo(absPoints.O)
-        lineTo(absPoints.A)
-        lineTo(absPoints.W)
-        quadraticBezierTo(absPoints.S, absPoints.M)
-        quadraticBezierTo(absPoints.U, absPoints.I)
-        lineTo(absPoints.H)
-        lineTo(absPoints.J)
-        quadraticBezierTo(absPoints.V, absPoints.N)
-        quadraticBezierTo(absPoints.T, absPoints.Z)
-        lineTo(absPoints.B)
+        moveTo(O)
+        lineTo(A)
+        lineTo(W)
+        quadraticBezierTo(S, M)
+        quadraticBezierTo(U, I)
+        lineTo(H)
+        lineTo(J)
+        quadraticBezierTo(V, N)
+        quadraticBezierTo(T, Z)
+        lineTo(B)
         close()
     }
 
     val thisPageBack = Path().apply {
-        reset()
-        moveTo(absPoints.H)
-        lineTo(absPoints.I)
-        quadraticBezierTo(absPoints.U, absPoints.M)
-        lineTo(absPoints.N)
-        quadraticBezierTo(absPoints.V, absPoints.J)
+        moveTo(H)
+        lineTo(I)
+        quadraticBezierTo(U, M)
+        lineTo(N)
+        quadraticBezierTo(V, J)
         close()
     }
 
     val nextPage = Path().apply {
-        reset()
-        moveTo(absPoints.C)
-        lineTo(absPoints.W)
-        quadraticBezierTo(absPoints.S, absPoints.M)
-        lineTo(absPoints.N)
-        quadraticBezierTo(absPoints.T, absPoints.Z)
+        moveTo(C)
+        lineTo(W)
+        quadraticBezierTo(S, M)
+        lineTo(N)
+        quadraticBezierTo(T, Z)
         close()
     }
 
-    return listOf(thisPage, thisPageBack, nextPage)
+    val lHF = Line.withTwoPoints(J, H)
+    val lHE = Line.withTwoPoints(H, I)
+//    val dMax = H.distanceTo(Line.withKAndOnePoint(lHE.k, M))
+    val KE = (S.x - K.x) * 2
+    val KERange = FloatRange(0f, stateTightMinWERatio * (C.x - O.x))
+    val shadow12Range = FloatRange(0f, shadowThreshold)
+    val shadow12Width = KERange.linearMapping(KE, shadow12Range)/*.run { minOf(this, dMax) }*/
+    val shadow3Width = shadow12Width * shadowPart3to1Ratio
+
+    val H1 = H.getExtensionPointInAbs(lHF, shadow12Width)
+    val lIParallel = Line.withKAndOnePoint(lHF.k, I)
+    val I1 = I.getExtensionPointInAbs(lIParallel, shadow12Width)
+    val lUParallel = Line.withKAndOnePoint(lHF.k, U)
+    val U1 = U.getExtensionPointInAbs(lUParallel, shadow12Width)
+
+    val lJParallel = Line.withKAndOnePoint(lHE.k, J)
+    val J1 = J.getExtensionPointInAbs(lJParallel, shadow12Width)
+    val lVParallel = Line.withKAndOnePoint(lHE.k, V)
+    val V1 = V.getExtensionPointInAbs(lVParallel, shadow12Width)
+
+    val kST = Line.withTwoPoints(S, T).k
+    val S1 = if (!kST.isNaN()) Point(S.x + shadow3Width / ((1 - 1 / (1 + kST * kST)).pow(0.5f)), C.y) else Point(S.x + shadow3Width, C.y)
+    Log.d(TAG, "buildPath: $kST")
+    val T1 = if (!kST.isNaN()) Point(C.x, Line.withKAndOnePoint(kST, S1).y(C.x)) else Point(S1.x, O.y)
+
+    //修bug：竖直时，翻转后
+
+    val shadow1 = Path().apply {
+        moveTo(H1)
+        arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg(), 90f, true)
+        lineTo(J1)
+        quadraticBezierTo(V1, N)
+        quadraticBezierTo(V, J)
+        lineTo(H)
+        close()
+    }
+
+    val shadow2 = Path().apply {
+        moveTo(H)
+        lineTo(H1)
+        lineTo(I1)
+        quadraticBezierTo(U1, M)
+        quadraticBezierTo(U, I)
+        close()
+    }
+
+    val shadow3 = Path().apply {
+        reset()
+        moveTo(W)
+        lineTo(S1)
+        lineTo(T1)
+        lineTo(Z)
+        close()
+    }
+
+    return Pair(listOf(thisPage, thisPageBack, nextPage), listOf(shadow1, shadow2, shadow3))
 }
 
 //处理翻转，绝对系
@@ -908,6 +984,7 @@ private data class Line(val k: Float, val b: Float) {
 
     fun x(y: Float) = (y - b) / k
 
+    //相对系
     fun theta() = theta(k)
 
     companion object {
@@ -942,6 +1019,26 @@ private data class QuadraticEquationWithOneUnknown(val a: Float, val b: Float, v
 private fun Float.toRad() = ((this * PI) / 180).toFloat()
 private fun Float.toDeg() = (this * 180 / PI).toFloat()
 
+//获取一个点在同一直线方向上延伸d的另一个点，d大于0则向左(若line的斜率不存在，则向下)延伸，屏幕绝对坐标系
+private fun Point.getExtensionPointInAbs(line: Line, d: Float): Point {
+    if (line.k.isNaN()) return Point(x, y + d)
+
+    val newX = x - d / (1 + line.k * line.k).pow(0.5f)
+    return Point(newX, line.y(newX))
+}
+
+private fun getAngularBisector(l1:Line, l2:Line, crossPoint: Point = l1.intersectAt(l2)): Pair<Line, Line> {
+    //偷个懒。
+    if (l1.k.isNaN() || l2.k.isNaN()) return Pair(Line.withTwoPoints(Point(0f, 0f), Point(0f, 0f)), Line.withTwoPoints(Point(0f, 0f), Point(0f, 0f)))
+
+    val u = (1 + l1.k * l1.k).pow(0.5f)
+    val v = (1 + l2.k * l2.k).pow(0.5f)
+
+    val k1 = (l2.k * v + l1.k * u) / (u + v)
+    val k2 = - 1 / k1
+    return Pair(Line.withKAndOnePoint(k1, crossPoint), Line.withKAndOnePoint(k2, crossPoint))
+}
+
 private data class FloatRange(val start: Float, val end: Float) {
     fun constraints(value: Float) = when {
         end in start..value -> end
@@ -970,7 +1067,7 @@ private data class FloatRange(val start: Float, val end: Float) {
     fun contains(value: Float) = value in start..end
 }
 
-private data class AllPoints(val O: Point, val A: Point, val B: Point, val C: Point, val H: Point, val I: Point, val J: Point, val M: Point, val N: Point, val S: Point, val T: Point, val U: Point, val V: Point, val W: Point, val Z: Point) {
+private data class AllPoints(val O: Point, val A: Point, val B: Point, val C: Point, val H: Point, val I: Point, val J: Point, val K:Point, val M: Point, val N: Point, val S: Point, val T: Point, val U: Point, val V: Point, val W: Point, val Z: Point) {
     fun toAbsSystem(absO: Point) = with(absO) {
         AllPoints(
             absScreenSystemWith(O),
@@ -980,6 +1077,7 @@ private data class AllPoints(val O: Point, val A: Point, val B: Point, val C: Po
             absScreenSystemWith(H),
             absScreenSystemWith(I),
             absScreenSystemWith(J),
+            absScreenSystemWith(K),
             absScreenSystemWith(M),
             absScreenSystemWith(N),
             absScreenSystemWith(S),
@@ -992,7 +1090,7 @@ private data class AllPoints(val O: Point, val A: Point, val B: Point, val C: Po
     }
 
     companion object {
-        fun default(absO: Point) = AllPoints(absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy())
+        fun default(absO: Point) = AllPoints(absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy(), absO.copy())
     }
 
     fun toCoordinateSystem(absO: Point) = with(absO) {
@@ -1004,6 +1102,7 @@ private data class AllPoints(val O: Point, val A: Point, val B: Point, val C: Po
             H.inCoordinateSystem(this),
             I.inCoordinateSystem(this),
             J.inCoordinateSystem(this),
+            K.inCoordinateSystem(this),
             M.inCoordinateSystem(this),
             N.inCoordinateSystem(this),
             S.inCoordinateSystem(this),
@@ -1024,6 +1123,7 @@ private data class AllPoints(val O: Point, val A: Point, val B: Point, val C: Po
             H.getSymmetricalPointAbout(this),
             I.getSymmetricalPointAbout(this),
             J.getSymmetricalPointAbout(this),
+            K.getSymmetricalPointAbout(this),
             M.getSymmetricalPointAbout(this),
             N.getSymmetricalPointAbout(this),
             S.getSymmetricalPointAbout(this),
