@@ -1,5 +1,7 @@
 package ptq.mpga.pinance.widget
 
+import android.graphics.LinearGradient
+import android.graphics.Shader
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -39,8 +41,9 @@ private const val animExitDuration = animEnterDuration //出动画时间
 
 private const val tapYDeltaRatio = 1 / 170f //点击翻页时，y方向偏移，不宜过大
 
-private const val shadowThreshold = 25f //阴影1、2阈值
+private const val shadowThreshold = 35f //阴影1、2阈值
 private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
+private const val shadow3VeticalThreshold = 50 //处理当接近垂直时，底层绘制api不正常工作的问题
 
 private enum class PageState {
     loose, wMin, thetaMin, tight
@@ -295,31 +298,34 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
             allPoints = this
         } ?: allPoints
 
-        val path = (if (upsideDown) all.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else all).buildPath()/*.forEachIndexed { index, path ->
-            drawPath(path = path, brush = Brush.linearGradient(colorStops = arrayOf(0f to Color.Black, 1f to Color.Black)), style = Stroke(width = 2.5f))
-        }*/
-
-        val blackColor = android.graphics.Color.toArgb(Color.Black.value.toLong())
-        val thisColor = android.graphics.Color.toArgb(Color.Magenta.value.toLong())
-        val thisBackColor = android.graphics.Color.toArgb(Color.White.value.toLong())
-        val nextColor = android.graphics.Color.toArgb(Color.Yellow.value.toLong())
-        drawIntoCanvas {
-            val paint = Paint()
-            val frameworkPaint = paint.asFrameworkPaint()
-            frameworkPaint.color = nextColor
-            it.drawPath(path.first[2], paint)
-            frameworkPaint.color = blackColor
-            it.drawPath(path.second[2], paint)
-            frameworkPaint.color = thisColor
-//            frameworkPaint.shader = LinearGradientShader()
-            it.drawPath(path.first[0], paint)
-            frameworkPaint.color = blackColor
-            it.drawPath(path.second[0], paint)
-            it.drawPath(path.second[1], paint)
-            frameworkPaint.color = thisBackColor
-            it.drawPath(path.first[1], paint)
+        (if (upsideDown) all.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else all).buildPath { paths, shadowPaths, shaderPointPairs ->
+            Log.d(TAG, "PTQPageFlipper: $shaderPointPairs")
+            val shadow12Color = android.graphics.Color.toArgb(Color.Black.copy(alpha = 0.3f).value.toLong())
+            val shadow3Color = android.graphics.Color.toArgb(Color.Black.copy(alpha = 0.6f).value.toLong())
+            val transparentColor = android.graphics.Color.toArgb(Color.Transparent.value.toLong())
+            val thisColor = android.graphics.Color.toArgb(Color.Magenta.value.toLong())
+            val thisBackColor = android.graphics.Color.toArgb(Color.White.value.toLong())
+            val nextColor = android.graphics.Color.toArgb(Color.Yellow.value.toLong())
+            drawIntoCanvas {
+                val paint = Paint()
+                val frameworkPaint = paint.asFrameworkPaint()
+                //注意图层绘制顺序
+                frameworkPaint.color = thisBackColor
+                it.drawPath(paths[2], paint)
+                frameworkPaint.shader = LinearGradient(shaderPointPairs[2].first.x, shaderPointPairs[2].first.y, shaderPointPairs[2].second.x, shaderPointPairs[2].second.y, shadow3Color, transparentColor, Shader.TileMode.CLAMP)
+                it.drawPath(shadowPaths[2], paint)
+                frameworkPaint.shader = null
+                frameworkPaint.color = thisBackColor
+                it.drawPath(paths[0], paint)
+                frameworkPaint.shader = LinearGradient(shaderPointPairs[0].first.x, shaderPointPairs[0].first.y, shaderPointPairs[0].second.x, shaderPointPairs[0].second.y, shadow12Color, transparentColor, Shader.TileMode.CLAMP)
+                it.drawPath(shadowPaths[0], paint)
+                frameworkPaint.shader = LinearGradient(shaderPointPairs[1].first.x, shaderPointPairs[1].first.y, shaderPointPairs[1].second.x, shaderPointPairs[1].second.y, shadow12Color, transparentColor, Shader.TileMode.CLAMP)
+                it.drawPath(shadowPaths[1], paint)
+                frameworkPaint.shader = null
+                frameworkPaint.color = thisBackColor
+                it.drawPath(paths[1], paint)
+            }
         }
-
     }
 }
 
@@ -742,8 +748,8 @@ private fun algorithmStateTight(absO: Point, absC: Point, theta: Float): Pair<Li
     return Pair(lFH, allPoints)
 }
 
-//绝对系，根据点计算路径，返回值第一项为页面路径，第二项为阴影路径
-private fun AllPoints.buildPath(): Pair<List<Path>, List<Path>> {
+//绝对系，根据点计算路径，返回值第一项为页面路径，第二项为阴影路径，第三项为阴影控制点
+private fun AllPoints.buildPath(result: (List<Path>, List<Path>, List<Pair<Point, Point>>) -> Unit) {
     val thisPage = Path().apply {
         moveTo(O)
         lineTo(A)
@@ -778,11 +784,10 @@ private fun AllPoints.buildPath(): Pair<List<Path>, List<Path>> {
 
     val lHF = Line.withTwoPoints(J, H)
     val lHE = Line.withTwoPoints(H, I)
-//    val dMax = H.distanceTo(Line.withKAndOnePoint(lHE.k, M))
     val KE = (S.x - K.x) * 2
     val KERange = FloatRange(0f, stateTightMinWERatio * (C.x - O.x))
     val shadow12Range = FloatRange(0f, shadowThreshold)
-    val shadow12Width = KERange.linearMapping(KE, shadow12Range)/*.run { minOf(this, dMax) }*/
+    val shadow12Width = KERange.linearMapping(KE, shadow12Range)
     val shadow3Width = shadow12Width * shadowPart3to1Ratio
 
     val H1 = H.getExtensionPointInAbs(lHF, shadow12Width)
@@ -791,6 +796,7 @@ private fun AllPoints.buildPath(): Pair<List<Path>, List<Path>> {
     val lUParallel = Line.withKAndOnePoint(lHF.k, U)
     val U1 = U.getExtensionPointInAbs(lUParallel, shadow12Width)
 
+    val H2 = H.getExtensionPointInAbs(lHE, shadow12Width)
     val lJParallel = Line.withKAndOnePoint(lHE.k, J)
     val J1 = J.getExtensionPointInAbs(lJParallel, shadow12Width)
     val lVParallel = Line.withKAndOnePoint(lHE.k, V)
@@ -798,14 +804,17 @@ private fun AllPoints.buildPath(): Pair<List<Path>, List<Path>> {
 
     val kST = Line.withTwoPoints(S, T).k
     val S1 = if (!kST.isNaN()) Point(S.x + shadow3Width / ((1 - 1 / (1 + kST * kST)).pow(0.5f)), C.y) else Point(S.x + shadow3Width, C.y)
-    Log.d(TAG, "buildPath: $kST")
     val T1 = if (!kST.isNaN()) Point(C.x, Line.withKAndOnePoint(kST, S1).y(C.x)) else Point(S1.x, O.y)
 
-    //修bug：竖直时，翻转后
-
+    Log.d(TAG, "buildPath: $H ${lHF.theta().toDeg()}")
     val shadow1 = Path().apply {
         moveTo(H1)
-        arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg(), 90f, true)
+        //处理翻转
+        if (C.y == 0f) {
+            arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg() + 180f, -90f, true)
+        } else {
+            arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg(), 90f, true)
+        }
         lineTo(J1)
         quadraticBezierTo(V1, N)
         quadraticBezierTo(V, J)
@@ -826,12 +835,22 @@ private fun AllPoints.buildPath(): Pair<List<Path>, List<Path>> {
         reset()
         moveTo(W)
         lineTo(S1)
-        lineTo(T1)
-        lineTo(Z)
+        //若接近垂直，则直接画成方形，否则画梯形
+        if (((T1.y - O.y) / (C.y - O.y)).absoluteValue > shadow3VeticalThreshold) {
+            lineTo(S1.copy(y = (C.y - O.y).absoluteValue - S1.y))
+            lineTo(W.copy(y = (C.y - O.y).absoluteValue - W.y))
+        } else {
+            lineTo(T1)
+            lineTo(Z)
+        }
         close()
     }
 
-    return Pair(listOf(thisPage, thisPageBack, nextPage), listOf(shadow1, shadow2, shadow3))
+    val lKL = Line.withKAndOnePoint(kST, K)
+    val lS1T1 = Line.withKAndOnePoint(kST, S1)
+    val lHC = Line.withTwoPoints(H, C)
+
+    result(listOf(thisPage, thisPageBack, nextPage), listOf(shadow1, shadow2, shadow3), listOf(Pair(H.processNaN(), H2.processNaN()), Pair(H.processNaN(), H1.processNaN()), Pair(lKL.intersectAt(lHC).processNaN(), lS1T1.intersectAt(lHC).processNaN())))
 }
 
 //处理翻转，绝对系
@@ -841,9 +860,8 @@ private fun DragEvent.getSymmetricalDragEventAbout(line: Line): DragEvent {
     return copy(originTouchPoint = origin, currentTouchPoint = current)
 }
 
-private fun Point.getXConstraintTouchPoint(screenWidth: Float) = copy(
-    x = maxOf(minOf(x, (1 - maxDragXRatio) * screenWidth), minWxRatio * screenWidth)
-)
+//如果有NaN就置0
+private fun Point.processNaN() = if (x.isNaN() || y.isNaN()) Point(0f, 0f) else this
 
 private data class DragEvent(val originTouchPoint: Point, val currentTouchPoint: Point) {
     val dragDelta get() = currentTouchPoint - originTouchPoint
