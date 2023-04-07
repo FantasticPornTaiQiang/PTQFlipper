@@ -1,5 +1,6 @@
 package ptq.mpga.pinance.widget
 
+import android.graphics.*
 import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
@@ -17,6 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -27,7 +32,7 @@ import ptq.mpga.pinance.widget.Line.Companion.k
 import ptq.mpga.pinance.widget.Line.Companion.theta
 import kotlin.math.*
 
-private const val TAG = "PTQPageFlipper"
+private const val TAG = "PTQPageFlipperInner"
 
 //带ratio的要乘屏幕比例
 private const val stateTightMinWERatio = 1 / 8f //进入tight状态的最小WE长度
@@ -38,7 +43,7 @@ private const val maxDragXRatio = stateTightDragRightScreenDistanceRatio //手�
 private const val minWxRatio = 1 / 25f //W.x的最小值
 private const val WKtoKSMax = 1f //loose状态WK:KS的最大值
 
-private const val animStartTimeout = 100 //动画在手指拖动多久后开始，此值不宜过大，会造成不准确
+private const val animStartTimeout = 100//动画在手指拖动多久后开始，此值不宜过大，会造成不准确
 private const val animEnterDuration = 100 //入动画时间，此值不宜过大，会造成不准确
 private const val animExitDuration = animEnterDuration //出动画时间
 
@@ -48,15 +53,16 @@ private const val shadowThreshold = 22f //阴影1、2阈值
 private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
 private const val shadow3VerticalThreshold = 50 //处理当接近垂直时，底层绘制api不正常工作的问题
 
-private val pageColor = Color(255, 255, 255) //当前页颜色
+//private val pageColor = Color(255, 255, 255) //当前页颜色
 private val shadow12Color = Color.Black.copy(alpha = 0.25f) //12部分阴影的颜色
-private val shadow3Color = Color.Black.copy(alpha = 0.6f) //3部分阴影的颜色
+private val shadow3Color = Color.Black.copy(alpha = 0.62f) //3部分阴影的颜色
 private val lustreColor = Color.Black.copy(alpha = 0.03f) //光泽部分阴影的颜色
 
+//最好设置为统一比例
 private val lustreStartMaxDistance = 9f //光泽右侧最大距离
 private val lustreStartMinDistance = 6f //光泽右侧最小距离，即当WEmin时的距离
-private val lustreEndMaxDistance = 6f //光泽左侧最大距离
-private val lustreEndMinDistance = 4f //光泽左侧最小距离，即当WEmin时的距离
+private val lustreEndMaxDistance = 9f //光泽左侧最大距离
+private val lustreEndMinDistance = 6f //光泽左侧最小距离，即当WEmin时的距离
 private val lustreEndShadowMaxWidth = 24f //光泽左侧阴影最大宽度
 private val lustreEndShadowMinWidth = 16f //光泽左侧阴影最小宽度，即当WEmin时的宽度
 
@@ -70,7 +76,7 @@ private enum class State {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun PTQPageFlipper(modifier: Modifier = Modifier) {
+internal fun PTQPageFlipperInner(bitmap: Bitmap, onNext: () -> Unit = {}, onPrevious: () -> Unit = {}) {
     //组件宽高和原点O
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val screenWidth = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
@@ -107,6 +113,9 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
     var animLastPoint by remember { mutableStateOf(absO.copy()) }
     //定时，拖动多久后开始播放动画
     var time by remember { mutableStateOf(0L) }
+
+    //当前页颜色
+    val (pageColor) = LocalFlipperConfig.current
 
     val exeExitAnim = {
         val startPoint = if (!upsideDown) allPoints.J else allPoints.J.getSymmetricalPointAbout(lBCPerpendicularBisector)
@@ -155,7 +164,7 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
         }
     }
 
-    Canvas(modifier = modifier
+    Canvas(modifier = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
             detectTapGestures { offset: Offset ->
@@ -270,7 +279,6 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
                         }
                         newState?.let { pageState = it }
                         newTheta?.let { theta = it }
-//                        newEmaxInThetaMin?.let { EmaxInMinTheta = it }
                         Log.d(TAG, "PTQPageFlipper: state $pageState start")
                     }
                 }
@@ -278,9 +286,6 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
                     buildStateWMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
                         theta = newTheta
                         pageState = newState
-                        if (newState == PageState.thetaMin) {
-//                            EmaxInMinTheta = dragXRange.end
-                        }
                         Log.d(TAG, "PTQPageFlipper: state $pageState start")
                     }
                 }
@@ -302,85 +307,102 @@ fun PTQPageFlipper(modifier: Modifier = Modifier) {
             null
         }
 
-//        val color = { index: Int ->
-//            when (index) {
-//                0 -> Color.Blue
-//                1 -> Color.Green
-//                2 -> Color.Yellow
-//                else -> Color.Black
-//            }
-//        }
-
         val all = newAllPoints?.apply {
             allPoints = this
         } ?: allPoints
 
-        (if (upsideDown) all.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else all).buildPath { paths, shadowPaths, shaderPointPairs, shadow12Width ->
+        drawImage(image = bitmap.asImageBitmap())
+
+        val allWithUpsideDown = if (upsideDown) all.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else all
+
+        allWithUpsideDown.buildPath { paths, shadowPaths, shaderPointPairs, shadow12Width ->
             val _shadow12Color = android.graphics.Color.toArgb(shadow12Color.value.toLong())
             val _shadow3Color = android.graphics.Color.toArgb(shadow3Color.value.toLong())
             val _lustreColor = android.graphics.Color.toArgb(lustreColor.value.toLong())
             val _pageColor = android.graphics.Color.toArgb(pageColor.value.toLong())
+            val _transparentColor = android.graphics.Color.toArgb(Color.Transparent.value.toLong())
             drawIntoCanvas {
                 val paint = Paint()
                 val frameworkPaint = paint.asFrameworkPaint()
                 //注意图层绘制顺序
+                //画下一页
                 frameworkPaint.color = _pageColor
                 it.drawPath(paths[2], paint)
-                frameworkPaint.shader = LinearGradient(
+
+                //画阴影区域3
+                frameworkPaint.shader =
+                    LinearGradient(
                     shaderPointPairs[2].first.x,
                     shaderPointPairs[2].first.y,
                     shaderPointPairs[2].second.x,
                     shaderPointPairs[2].second.y,
                     _shadow3Color,
-                    _pageColor,
+                    _transparentColor,
                     Shader.TileMode.CLAMP
                 )
                 it.drawPath(shadowPaths[2], paint)
+
+                //画当前页
                 frameworkPaint.shader = null
                 frameworkPaint.color = _pageColor
                 it.drawPath(paths[0], paint)
+//                frameworkPaint.shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+//                it.drawPath(paths[0], paint)
+                it.drawDistortion(bitmap, allWithUpsideDown, absO)
+
+                //画阴影区域1
                 frameworkPaint.shader = LinearGradient(
                     shaderPointPairs[0].first.x,
                     shaderPointPairs[0].first.y,
                     shaderPointPairs[0].second.x,
                     shaderPointPairs[0].second.y,
                     _shadow12Color,
-                    _pageColor,
+                    _transparentColor,
                     Shader.TileMode.CLAMP
                 )
                 it.drawPath(shadowPaths[0], paint)
+
+                //画阴影区域2
                 frameworkPaint.shader = LinearGradient(
                     shaderPointPairs[1].first.x,
                     shaderPointPairs[1].first.y,
                     shaderPointPairs[1].second.x,
                     shaderPointPairs[1].second.y,
                     _shadow12Color,
-                    _pageColor,
+                    _transparentColor,
                     Shader.TileMode.CLAMP
                 )
                 it.drawPath(shadowPaths[1], paint)
-                frameworkPaint.shader = RadialGradient(shaderPointPairs[0].first.x, shaderPointPairs[0].first.y, shadow12Width, _shadow12Color, _pageColor, Shader.TileMode.CLAMP)
+
+                //画阴影区域4（圆弧）
+                frameworkPaint.shader = RadialGradient(shaderPointPairs[0].first.x, shaderPointPairs[0].first.y, shadow12Width, _shadow12Color, _transparentColor, Shader.TileMode.CLAMP)
                 it.drawPath(shadowPaths[3], paint)
+
+                //画当前页背面
                 frameworkPaint.shader = null
                 frameworkPaint.color = _pageColor
                 it.drawPath(paths[1], paint)
+
+                //画光泽左侧阴影
                 frameworkPaint.shader = LinearGradient(
                     shaderPointPairs[3].first.x,
                     shaderPointPairs[3].first.y,
                     shaderPointPairs[3].second.x,
                     shaderPointPairs[3].second.y,
                     _lustreColor,
-                    _pageColor,
+                    _transparentColor,
                     Shader.TileMode.CLAMP
                 )
                 it.drawPath(shadowPaths[4], paint)
+
+                //画光泽右侧阴影
                 frameworkPaint.shader = LinearGradient(
                     shaderPointPairs[4].first.x,
                     shaderPointPairs[4].first.y,
                     shaderPointPairs[4].second.x,
                     shaderPointPairs[4].second.y,
                     _lustreColor,
-                    _pageColor,
+                    _lustreColor,
                     Shader.TileMode.CLAMP
                 )
                 it.drawPath(shadowPaths[5], paint)
@@ -412,8 +434,6 @@ private inline fun buildStateLoose(
 //    Log.d(TAG, "buildStateLoose: kJH$kJH  W.x${points.W.x} minWx${minWxRatio * points.C.x} theta${theta.toDeg()} direction${dragDirection}")
 
     if (dragDirection == DragDirection.static || kJH.isNaN()) return null
-
-    //TODO: 状态转变用curTouchPoint计算
 
     if (state == State.enterAnimStart || state == State.draggable) {
         when {
@@ -634,14 +654,14 @@ private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Poin
     val P = lEF.intersectAt(lCH)
     val H = Point(2 * P.x - C.x, 2 * P.y - C.y)
 
-    val isFingerRightOut = H.distanceTo(R) > f || R.distanceTo(Line.withKAndOnePoint(0f, C)) > f
+    val isFingerOut = H.distanceTo(R) > f || R.distanceTo(Line.withKAndOnePoint(0f, C)) > f
 
 //    val Emax = C.x - f / k(minTheta - PI.toFloat() / 2) - stateTightMinWERatio * C.x
 
 //    val ERange = FloatRange(minWE + minWx, maxOf(minWE + minWx, Emax))
 
 //    Log.d(TAG, "algorithmStateThetaMin: isFingerRightOut: $isFingerRightOut isLoose: $isLoose")
-    val Kx_ = if (isFingerRightOut) {
+    val Kx_ = if (isFingerOut) {
         R.x - (R.y - C.y) / k
     } else {
         if (isLoose) loosePoints.K.x else WMinPoints.K.x
@@ -670,10 +690,7 @@ private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Poin
     val M = U..S
     val N = T..V
 
-    val KRange = FloatRange(minWx, C.x)
-    val WKRatioRange = FloatRange(0f, WKtoKSMax)
-
-    val Wx_ = if (isFingerRightOut) {
+    val Wx_ = if (isFingerOut) {
 //        (K.x - KRange.linearMapping(K.x, WKRatioRange) * (E.x - S.x)).run {
 //            maxOf(this, minWx)
 //        }
@@ -1019,6 +1036,50 @@ private fun AllPoints.buildPath(result: (List<Path>, List<Path>, List<Pair<Point
         ),
         shadow12Width
     )
+}
+
+private fun Canvas.drawDistortion(bitmap: Bitmap, allPoints: AllPoints, absO: Point, ) {
+    val all = allPoints.toCoordinateSystem(absO)
+    val paint = Paint()
+    val frameworkPaint = paint.asFrameworkPaint()
+    val meshWidthCount = 200
+    val meshHeightCount = 300
+    //TODO: 格点的设置，边缘联合裁剪，处理翻转，翻转抖动问题
+    val size = (meshWidthCount + 1) * (meshHeightCount + 1) * 2
+    val vertices = FloatArray(size)
+    val height = bitmap.height.toFloat()
+    val width = bitmap.width.toFloat()
+
+    var index = 0
+    (0..meshHeightCount).forEach { i ->
+        val y = height * i / meshHeightCount
+        (0..meshWidthCount).forEach { j ->
+            val x = width * j / meshWidthCount
+            //vertices格式为[x1,y1] [x2,y2] [x3,y3]
+            vertices[index * 2] = x
+            vertices[index * 2 + 1] = y
+            index++
+        }
+    }
+
+    (0 until size / 2).forEach { i ->
+        val x = vertices[i * 2]
+        val y = vertices[i * 2 + 1]
+        val G = Point(x, y).inCoordinateSystem(absO)
+        val kCH = Line.withTwoPoints(all.C, all.H).k
+        val LK = Line.withKAndOnePoint(-1 / kCH, all.K)
+
+        if (!G.isBelow(LK)) return@forEach
+
+        val delta = all.N.distanceTo(LK) * PI.toFloat() / all.J.distanceTo(Point(all.C.x, all.J.y + kCH * (all.C.x - all.J.x)))
+        val r = all.N.distanceTo(LK)
+        val d = G.distanceTo(LK)
+        val Q = absO.absScreenSystemWith(G.getExtensionPointInAbs(Line.withKAndOnePoint(kCH, G), d - r * sin(d * delta / r)))
+        vertices[i * 2] = Q.x
+        vertices[i * 2 + 1] = Q.y
+    }
+
+    nativeCanvas.drawBitmapMesh(bitmap, meshWidthCount, meshHeightCount, vertices, 0 , null, 0, frameworkPaint)
 }
 
 //处理翻转，绝对系
