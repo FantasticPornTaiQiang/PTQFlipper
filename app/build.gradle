@@ -65,4 +65,6 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_version"
     implementation 'com.qmuiteam:qmui:2.0.0-alpha10'
     implementation 'androidx.constraintlayout:constraintlayout-compose:1.0.1'
+    implementation 'com.google.accompanist:accompanist-systemuicontroller:0.15.0'
+    implementation "com.google.accompanist:accompanist-insets:0.15.0"
 }
