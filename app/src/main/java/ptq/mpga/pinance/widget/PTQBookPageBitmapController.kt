@@ -56,7 +56,6 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) val totalPage: In
     fun needBitmapAt(page: Int) {
         if (needBitmapPages.isNotEmpty()) return
         calculateNeedBitmapPages(page)
-        Log.d(TAG, "needBitmapAt: $needBitmapPages")
         exeRecompositionBlock?.let { it() }
     }
 
@@ -77,8 +76,6 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) val totalPage: In
         }
 
         val first = needBitmapPages.first()
-
-        Log.d(TAG, "saveRenderedBitmap: ${first}")
         needBitmapPages.removeAt(0)
         bitmapBuffer[first.second]?.recycle()
         bitmapBuffer[first.second] = bitmap

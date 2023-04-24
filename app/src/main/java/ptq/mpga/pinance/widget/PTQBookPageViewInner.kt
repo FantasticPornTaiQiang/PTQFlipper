@@ -55,7 +55,7 @@ private const val shadow3VerticalThreshold = 50 //处理当接近垂直时，底
 
 private val shadow12Color = Color.Black.copy(alpha = 0.3f) //12部分阴影的颜色
 private val shadow3Color = Color.Black.copy(alpha = 0.65f) //3部分阴影的颜色
-private val lustreColor = Color.Black.copy(alpha = 0.03f) //光泽部分阴影的颜色
+private val lustreColor = Color.Black.copy(alpha = 0.02f) //光泽部分阴影的颜色
 
 //最好设置为统一比例
 private const val lustreStartMaxDistance = 9f //光泽右侧最大距离
@@ -83,8 +83,12 @@ private enum class State {
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, content: @Composable BoxScope.(index: Int, block: () -> Unit) -> Unit, onNext: () -> Unit = {}, onPrevious: () -> Unit =
-    {}) {
+internal fun PTQBookPageViewInner(
+    controller: PTQBookPageBitmapController,
+    content: @Composable BoxScope.(index: Int, block: () -> Unit) -> Unit,
+    onNext: () -> Unit = {},
+    onPrevious: () -> Unit = {}
+) {
     //组件宽高和原点O
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val screenWidth = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
@@ -162,6 +166,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
         pageState = PageState.Loose
         state = State.ExitAnimStart
     }
+
     //动画
     val animFloatRatio by animateFloatAsState(targetValue = if (state == State.EnterAnimStart || state == State.ExitAnimStart) 1f else 0f, finishedListener = {
         //动画结束时
@@ -360,8 +365,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                 }
             }
 
-
-            //计算本轮点坐标，如果有状态变化，则舍弃本轮（newAllPoints为空）
+            //计算本轮点坐标，如果有状态变化，则舍弃本轮（直接使用上一轮的allPoints）
             val newAllPoints = if (dragEvent != null && !dragEvent.isUnmoved) {
                 dragEvent = if (upsideDown) dragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else dragEvent
 
@@ -404,23 +408,33 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                 null
             }
 
-            //如果newAllPoint为空，或者页面完全垂直，则舍弃本轮
-            if (newAllPoints != null && !Line.withTwoPoints(newAllPoints.W, newAllPoints.Z).k.isNaN()) {
-                allPoints = newAllPoints
-            }
-
-            val upsideDownAll = if (upsideDown) allPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else allPoints
-
             val distortBitmap = controller.getBitmapCurrent(if (isRightToLeftWhenDrag) 1 else 0)
             val backgroundBitmap = controller.getBitmapCurrent(if (isRightToLeftWhenDrag) 2 else 1)
             val currentBitmap = if (isRightToLeftWhenDrag) distortBitmap else backgroundBitmap
 
-            val (distortedEdges, distortedVertices, meshCounts) = upsideDownAll.toCoordinateSystem(absO).buildDistortionPoints(
-                distortBitmap,
-                absO,
-                upsideDown
-            )
-            val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = upsideDownAll.buildPath(distortedEdges, upsideDown)
+            val nonNullAllPoints = newAllPoints ?: allPoints
+
+            var upsideDownAllPoints = if (upsideDown) nonNullAllPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else nonNullAllPoints
+
+            var (distortedEdges, distortedVertices, meshCounts) = upsideDownAllPoints.toCoordinateSystem(absO).buildDistortionPoints(distortBitmap, absO, upsideDown)
+
+            //如果newAllPoint为空，或者页面完全垂直，则舍弃本轮，使用上一轮的点重新计算
+            if (distortedEdges[0].isNotEmpty()) {
+                if (newAllPoints != null) {
+                    allPoints = newAllPoints
+                }
+            } else {
+                if (newAllPoints != null) {
+                    //newAllPoints不为null意味着使用的是本轮的点计算的，因此重算一次，如果为null则已经用的是allPoints算的了，不需要重算
+                    upsideDownAllPoints = if (upsideDown) allPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else allPoints
+                    val lastAll = upsideDownAllPoints.toCoordinateSystem(absO).buildDistortionPoints(distortBitmap, absO, upsideDown)
+                    distortedEdges = lastAll.first
+                    distortedVertices = lastAll.second
+                    meshCounts = lastAll.third
+                }
+            }
+
+            val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = upsideDownAllPoints.buildPath(distortedEdges, upsideDown)
 
             Canvas(modifier = Modifier.fillMaxSize(), onDraw = {
                 drawIntoCanvas {
@@ -432,7 +446,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                     //注意图层绘制顺序
 
                     //点还没计算出来就只画当前
-                    if (upsideDownAll.C.x == 0f) {
+                    if (upsideDownAllPoints.C.x == upsideDownAllPoints.O.x) {
                         nativeCanvas.drawBitmap(currentBitmap, absO.x, absO.y, frameworkPaint)
                         return@drawIntoCanvas
                     }
@@ -458,7 +472,6 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                     frameworkPaint.shader = null
                     frameworkPaint.color = _pageColor
                     it.drawPath(paths[0], paint)
-//                    it.drawDistortion(controller.getCurrentBitmaps()[if (isRightToLeftWhenDrag) 1 else 0], upsideDownAll, absO, upsideDown)
                     nativeCanvas.drawBitmapMesh(distortBitmap, meshCounts[0], meshCounts[1], distortedVertices, 0, null, 0, frameworkPaint)
 
                     //画阴影区域1
@@ -563,7 +576,6 @@ private inline fun buildStateLoose(
             }
         }
     }
-
 
     return points.toAbsSystem(absO)
 }
@@ -1182,28 +1194,30 @@ private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsid
         if ((xIndex / 2 + 1) % (meshWidthCount + 1) == 0) {
             when {
                 NVJRange.contains(G.y) -> {
-                    NVJPoints.run {
+                    NVJPoints.apply {
                         add(absQ.x)
                         add(absQ.y)
                     }
                 }
                 ZTNRange.contains(G.y) -> {
-                    ZTNPoints.run {
+                    ZTNPoints.apply {
                         add(absQ.x)
                         add(absQ.y)
                     }
                 }
             }
-        } else if (if (!isUpsideDown) xIndex >= bottomMinXIndex else xIndex <= 2 * meshWidthCount) { //如果是最下（上）侧边界点
+        }
+        //如果是最下（上）侧边界点
+        else if (if (!isUpsideDown) xIndex >= bottomMinXIndex else xIndex <= 2 * meshWidthCount) {
             when {
                 WSMRange.contains(G.x) -> {
-                    WSMPoints.run {
+                    WSMPoints.apply {
                         add(absQ.x)
                         add(absQ.y)
                     }
                 }
                 MUIRange.contains(G.x) -> {
-                    MUIPoints.run {
+                    MUIPoints.apply {
                         add(absQ.x)
                         add(absQ.y)
                     }
@@ -1352,6 +1366,7 @@ private fun Path.quadraticBezierTo(controlPoint: Point?, endPoint: Point?) {
         this.quadraticBezierTo(controlPoint.x, controlPoint.y, endPoint.x, endPoint.y)
     }
 }
+
 private fun Path.connect(points: List<Float>, reverse: Boolean = false) {
     val size = points.size / 2
     (0 until size).forEach { i ->

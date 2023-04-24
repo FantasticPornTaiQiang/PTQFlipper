@@ -104,8 +104,6 @@ fun PTQBookPageView(
                             recomposeTrigger = System.currentTimeMillis()
                         }
 
-                        Log.d(TAG, "Content:")
-
                         Box(
                             Modifier
                                 .wrapContentSize()
@@ -132,8 +130,6 @@ fun PTQBookPageView(
                         controller.saveRenderedBitmap(source)
                     }
                 }
-            }, update = {
-                Log.d(TAG, "PTQBookPageView: aaaaa")
             }
         )
 
