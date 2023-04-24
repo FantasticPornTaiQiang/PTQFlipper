@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -75,12 +76,15 @@ private enum class State {
 }
 
 /**
+ * @param content 内容
+ * @param controller 控制器
  * @param onNext 企图下一页时调用（当处于最后一页仍想翻下一页也会触发onNext）
  * @param onPrevious 企图上一页时调用（当处于第一页仍想翻下一页也会触发onPrevious）
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, content: @Composable BoxScope.(index: Int) -> Unit, onNext: () -> Unit = {}, onPrevious: () -> Unit = {}) {
+internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, content: @Composable BoxScope.(index: Int, block: () -> Unit) -> Unit, onNext: () -> Unit = {}, onPrevious: () -> Unit =
+    {}) {
     //组件宽高和原点O
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val screenWidth = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
@@ -127,13 +131,18 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
 
     //当前页颜色
     val (pageColor) = LocalPTQBookPageViewConfig.current
-    //各个颜色
+    //12区域阴影颜色
     val _shadow12Color = android.graphics.Color.toArgb(shadow12Color.value.toLong())
+    //3区阴影颜色
     val _shadow3Color = android.graphics.Color.toArgb(shadow3Color.value.toLong())
+    //光泽阴影颜色
     val _lustreColor = android.graphics.Color.toArgb(lustreColor.value.toLong())
+    //页面颜色
     val _pageColor = android.graphics.Color.toArgb(pageColor.value.toLong())
+    //透明色
     val _transparentColor = android.graphics.Color.toArgb(Color.Transparent.value.toLong())
 
+    //退出动画lambda
     val exeExitAnim = rememberUpdatedState {
         val startPoint = if (!upsideDown) allPoints.J else allPoints.J.getSymmetricalPointAbout(lBCPerpendicularBisector)
         f = maxOf(0f, allPoints.J.distanceTo(allPoints.H))
@@ -153,7 +162,6 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
         pageState = PageState.Loose
         state = State.ExitAnimStart
     }
-
     //动画
     val animFloatRatio by animateFloatAsState(targetValue = if (state == State.EnterAnimStart || state == State.ExitAnimStart) 1f else 0f, finishedListener = {
         //动画结束时
@@ -185,6 +193,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
         }
     }, animationSpec = TweenSpec(easing = LinearEasing, durationMillis = if (state == State.EnterAnimStart) animDuration[0] else if (state == State.ExitAnimStart) animDuration[1] else 0))
 
+    //拖动结束lambda
     val onDragEnd = rememberUpdatedState {
         when (state) {
             State.Draggable -> {
@@ -215,50 +224,59 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
         .fillMaxSize()
         .pointerInput(Unit) {
             detectTapGestures { offset: Offset ->
-                if (state == State.Idle && dragXRange.contains(offset.x)) {
-                    val touchPoint = offset.toPoint
-                    val tapYDelta = tapYDeltaRatio * screenHeight
+                if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk()) {
+                    return@detectTapGestures
+                }
 
-                    if (touchPoint.y > tapYDelta) {
-                        val isLeftToRight = touchPoint.x < 0.5f * screenWidth
+                val touchPoint = offset.toPoint
+                val tapYDelta = tapYDeltaRatio * screenHeight
 
-                        if (controller.currentPage >= controller.totalPage - 1 && !isLeftToRight) {
-                            onNext()
-                            return@detectTapGestures
-                        }
-                        if (controller.currentPage <= 0 && isLeftToRight) {
-                            onPrevious()
-                            return@detectTapGestures
-                        }
+                if (touchPoint.y > tapYDelta) {
+                    val isLeftToRight = touchPoint.x < 0.5f * screenWidth
 
-                        val startPoint = Point(x = if (isLeftToRight) -dragXRange.end * 0.5f else dragXRange.end, y = if (isLeftToRight) touchPoint.y - tapYDelta else touchPoint.y)
-                        f = screenHeight - touchPoint.y.absoluteValue
-                        val endPoint = Point(x = if (isLeftToRight) dragXRange.end else -dragXRange.end * 0.5f, y = if (isLeftToRight) touchPoint.y else touchPoint.y - tapYDelta)
-                        animLastPoint = startPoint.copy()
-                        animStartAndEndPoint = DragEvent(startPoint.copy(), endPoint.copy())
-                        pageState = PageState.Loose
-                        animDuration = arrayOf(animEnterDuration, animEnterDuration + animExitDuration)
-                        state = State.ExitAnimStart
-
-                        isRightToLeftWhenDrag = !isLeftToRight
-                        isNextOrPrevious = !isLeftToRight
+                    if (controller.currentPage >= controller.totalPage - 1 && !isLeftToRight) {
+                        onNext()
+                        return@detectTapGestures
                     }
+
+                    if (controller.currentPage <= 0 && isLeftToRight) {
+                        onPrevious()
+                        return@detectTapGestures
+                    }
+
+                    val startPoint = Point(x = if (isLeftToRight) -dragXRange.end * 0.5f else dragXRange.end, y = if (isLeftToRight) touchPoint.y - tapYDelta else touchPoint.y)
+                    f = screenHeight - touchPoint.y.absoluteValue
+                    val endPoint = Point(x = if (isLeftToRight) dragXRange.end else -dragXRange.end * 0.5f, y = if (isLeftToRight) touchPoint.y else touchPoint.y - tapYDelta)
+                    animLastPoint = startPoint.copy()
+                    animStartAndEndPoint = DragEvent(startPoint.copy(), endPoint.copy())
+                    pageState = PageState.Loose
+                    animDuration = arrayOf(animEnterDuration, animEnterDuration + animExitDuration)
+                    state = State.ExitAnimStart
+
+                    isRightToLeftWhenDrag = !isLeftToRight
+                    isNextOrPrevious = !isLeftToRight
                 }
             }
         }
         .pointerInput(Unit) {
             detectDragGestures(
-                onDragStart = { offset ->
-                    if (state == State.Idle && dragXRange.contains(offset.x)) {
-                        val touchPoint = offset.toPoint
-                        pageState = PageState.Loose
-                        curDragEvent = DragEvent(touchPoint, touchPoint)
-                        f = screenHeight - touchPoint.y.absoluteValue
-                        animStartAndEndPoint = animStartAndEndPoint.copy(originTouchPoint = touchPoint)
-                        time = System.currentTimeMillis()
+                onDragStart = { offset: Offset ->
+                    if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk()) {
+                        return@detectDragGestures
                     }
+
+                    val touchPoint = offset.toPoint
+                    pageState = PageState.Loose
+                    curDragEvent = DragEvent(touchPoint, touchPoint)
+                    f = screenHeight - touchPoint.y.absoluteValue
+                    animStartAndEndPoint = animStartAndEndPoint.copy(originTouchPoint = touchPoint)
+                    time = System.currentTimeMillis()
                 },
-                onDrag = { _, dragAmount ->
+                onDrag = { _: PointerInputChange, dragAmount: Offset ->
+                    if (!controller.isRenderOk()) {
+                        return@detectDragGestures
+                    }
+
                     val cur = (curDragEvent.currentTouchPoint + dragAmount.toPoint)
                     curDragEvent = DragEvent(curDragEvent.currentTouchPoint.copy(), cur)
 
@@ -313,6 +331,10 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                     }
                 },
                 onDragEnd = {
+                    if (!controller.isRenderOk()) {
+                        return@detectDragGestures
+                    }
+
                     onDragEnd.value()
                 }
             )
@@ -320,7 +342,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
         .background(color = pageColor)
     ) {
         if (state == State.Idle) {
-            content(controller.currentPage)
+            content(controller.currentPage) {}
         } else {
             //如果正在动画，则使用动画的animDragEvent，否则使用拖动的
             var dragEvent = when (state) {
@@ -337,6 +359,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                     null
                 }
             }
+
 
             //计算本轮点坐标，如果有状态变化，则舍弃本轮（newAllPoints为空）
             val newAllPoints = if (dragEvent != null && !dragEvent.isUnmoved) {
@@ -388,8 +411,12 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
 
             val upsideDownAll = if (upsideDown) allPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else allPoints
 
+            val distortBitmap = controller.getBitmapCurrent(if (isRightToLeftWhenDrag) 1 else 0)
+            val backgroundBitmap = controller.getBitmapCurrent(if (isRightToLeftWhenDrag) 2 else 1)
+            val currentBitmap = if (isRightToLeftWhenDrag) distortBitmap else backgroundBitmap
+
             val (distortedEdges, distortedVertices, meshCounts) = upsideDownAll.toCoordinateSystem(absO).buildDistortionPoints(
-                controller.getCurrentBitmaps()[if (isRightToLeftWhenDrag) 1 else 0],
+                distortBitmap,
                 absO,
                 upsideDown
             )
@@ -406,12 +433,12 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
 
                     //点还没计算出来就只画当前
                     if (upsideDownAll.C.x == 0f) {
-                        nativeCanvas.drawBitmap(controller.getCurrentBitmaps()[1], absO.x, absO.y, frameworkPaint)
+                        nativeCanvas.drawBitmap(currentBitmap, absO.x, absO.y, frameworkPaint)
                         return@drawIntoCanvas
                     }
 
                     //画下一页
-                    nativeCanvas.drawBitmap(controller.getCurrentBitmaps()[if (isRightToLeftWhenDrag) 2 else 1], absO.x, absO.y, frameworkPaint)
+                    nativeCanvas.drawBitmap(backgroundBitmap, absO.x, absO.y, frameworkPaint)
 
                     //画阴影区域3
                     frameworkPaint.shader =
@@ -432,7 +459,7 @@ internal fun PTQBookPageViewInner(controller: PTQBookPageBitmapController, conte
                     frameworkPaint.color = _pageColor
                     it.drawPath(paths[0], paint)
 //                    it.drawDistortion(controller.getCurrentBitmaps()[if (isRightToLeftWhenDrag) 1 else 0], upsideDownAll, absO, upsideDown)
-                    nativeCanvas.drawBitmapMesh(controller.getCurrentBitmaps()[if (isRightToLeftWhenDrag) 1 else 0], meshCounts[0], meshCounts[1], distortedVertices, 0, null, 0, frameworkPaint)
+                    nativeCanvas.drawBitmapMesh(distortBitmap, meshCounts[0], meshCounts[1], distortedVertices, 0, null, 0, frameworkPaint)
 
                     //画阴影区域1
                     frameworkPaint.shader = LinearGradient(

@@ -2,7 +2,6 @@ package ptq.mpga.pinance
 
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
@@ -11,26 +10,28 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.Button
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
-import androidx.compose.material.Text
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
+import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
+
+private const val TAG = "PTQBookPageMainActivity"
 
 class MainActivity : AppCompatActivity() {
+
+    private val allList = listOf(R.drawable.xinhai1, R.drawable.xinhai2,
+        R.drawable.xinhai3, R.drawable.xinhai4, R.drawable.xinhai5, R.drawable.xinhai6, R.drawable.xinhai7, R.drawable.xinhai8, R.drawable.xinhai9, R.drawable.ptq)
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,59 +41,130 @@ class MainActivity : AppCompatActivity() {
             PinanceTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(color = MaterialTheme.colors.background) {
+
+//                    var text by remember {
+//                        mutableStateOf("")
+//                    }
+//
+//                    Button(onClick = { text = System.currentTimeMillis().toString() }) {
+//
+//                    }
+//
+//                    Test {
+//                        var text1 = derivedStateOf {
+//                            text
+//                        }
+//
+//                        Box(modifier = Modifier.fillMaxSize()) {
+//                            Text(text = text, modifier = Modifier.align(Alignment.Center))
+//                        }
+//
+//                        SideEffect {
+//                            Log.d(TAG, "onCreate: 123456")
+//                        }
+//                    }
+
                     val all = remember {
                         mutableStateListOf(
                             R.drawable.xinhai1, R.drawable.xinhai2,
                             R.drawable.xinhai3, R.drawable.xinhai4, R.drawable.xinhai5, R.drawable.xinhai6, R.drawable.xinhai7, R.drawable.xinhai8, R.drawable.xinhai9, R.drawable.ptq
                         )
                     }
-//                    Test(Color.Green)
 
-                    PTQBookPageView(pageCount = all.size) {
-                        contents { index ->
-//                            when (index) {
-//                                0 -> {
-//                                    Column(modifier = Modifier.fillMaxSize()) {
-//                                        Image(painter = painterResource(id = R.drawable.xinhai2), contentDescription = "xinhai2")
-//                                        Text(text = text2)
-//                                    }
-//                                }
-//                                1 -> {
-//                                    Text(text = text, modifier = Modifier.fillMaxSize())
-//                                }
-//                                2 -> {
-//                                    Image(painter = painterResource(id = R.drawable.xinhai1), contentDescription = "xinhai", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
-//                                }
-//                            }
+                    val pageCount = 100
 
-                            Box(Modifier.fillMaxSize()) {
-                                Image(painter = painterResource(id = all[index]), contentDescription = "xinhai", modifier = Modifier
-                                    .wrapContentSize(Alignment.Center)
-                                    .align(Alignment.Center))
+                    val state = rememberPTQBookPageViewState(pageCount)
 
-                                Text(
-                                    text = (index + 1).toString() + " / " + all.size,
-                                    Modifier
-                                        .padding(bottom = 40.dp)
-                                        .background(color = Color.Gray.copy(alpha = 0.5f))
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .align(Alignment.BottomCenter)
-                                )
-                            }
-                        }
-
+                    PTQBookPageView(pageCount = pageCount, ptqBookPageViewScope = {
                         onPageWantToChange { _, nextOrPrevious, success ->
                             if (!success) {
                                 Toast.makeText(this@MainActivity, if (nextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
                             }
                         }
-                    }
 
+                        contents { index, refresh ->
+                            Box(Modifier.fillMaxSize()) {
+                                if (index < all.size) {
+                                    Image(
+                                        painter = painterResource(id = all[index]), contentDescription = "xinhai", modifier = Modifier
+                                            .wrapContentSize(Alignment.Center)
+                                            .align(Alignment.Center)
+                                    )
+                                } else {
+                                    Text(text = (index + 1).toString(),
+                                        Modifier
+                                            .size(50.dp)
+                                            .align(Alignment.Center))
+                                }
+
+                                Row(
+                                    Modifier
+                                        .padding(bottom = 40.dp)
+                                        .background(color = Color.Gray.copy(alpha = 0.5f))
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                        .align(Alignment.BottomCenter),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = (index + 1).toString() + " / " + pageCount)
+                                    Button(
+                                        onClick = { all[index] = allList.random() }, modifier = Modifier
+                                            .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+                                    ) {
+                                        Text("换一张")
+                                    }
+                                }
+                            }
+
+                            refresh()
+                        }
+                    })
                 }
             }
         }
     }
 }
+
+//@Composable
+//fun Test(content: @Composable () -> Unit) {
+//    val contentBlock by remember {
+//        derivedStateOf {
+//            Log.d(TAG, "Test: po")
+//            content
+//        }
+//    }
+//
+//    AndroidView(
+//        modifier = Modifier.fillMaxSize(),
+//        factory = { context ->
+//            object : AbstractComposeView(context) {
+//
+//                @Composable
+//                override fun Content() {
+//                    Log.d(TAG, "Content: abc0")
+//                    Box(
+//                        Modifier
+//                            .fillMaxSize()
+//                    ) {
+//                        Log.d(TAG, "Content: abc")
+//                        contentBlock()
+//                        Text("123123123123123123123123213")
+//                    }
+//
+//                    SideEffect {
+//                        Log.d(TAG, "onCreate: 12345689")
+//                    }
+//                }
+//
+//                override fun onDraw(canvas: Canvas?) {
+//                    super.onDraw(canvas)
+//                    Log.d(TAG, "onDraw: 123")
+//                }
+//
+//            }
+//        }
+//    )
+////    block.value()
+//}
 
 //@Composable
 //fun Test() {
