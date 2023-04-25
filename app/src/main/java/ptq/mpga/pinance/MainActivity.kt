@@ -2,6 +2,7 @@ package ptq.mpga.pinance
 
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
@@ -11,6 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
+import ptq.mpga.pinance.widget.PTQBookPageViewState
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
 
 private const val TAG = "PTQBookPageMainActivity"
@@ -71,11 +74,9 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
 
-                    val pageCount = 100
+                    var state by rememberPTQBookPageViewState(pageCount = 100)
 
-                    val state = rememberPTQBookPageViewState(pageCount)
-
-                    PTQBookPageView(pageCount = pageCount, ptqBookPageViewScope = {
+                    PTQBookPageView(state = state, ptqBookPageViewScope = {
                         onPageWantToChange { _, nextOrPrevious, success ->
                             if (!success) {
                                 Toast.makeText(this@MainActivity, if (nextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
@@ -105,9 +106,12 @@ class MainActivity : AppCompatActivity() {
                                         .align(Alignment.BottomCenter),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = (index + 1).toString() + " / " + pageCount)
+                                    Text(text = (index + 1).toString() + " / " + state.pageCount)
                                     Button(
-                                        onClick = { all[index] = allList.random() }, modifier = Modifier
+                                        onClick = {
+//                                            all[index] = allList.random()
+                                                  state = state.copy(pageCount = (5..15).toMutableList().random())
+                                                  }, modifier = Modifier
                                             .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
                                     ) {
                                         Text("换一张")

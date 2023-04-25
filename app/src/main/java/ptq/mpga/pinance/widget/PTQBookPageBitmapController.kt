@@ -13,7 +13,7 @@ private const val TAG = "PTQBookPageBitmapController"
  *
  * 使用SideEffect监听重组，如果重组发生，则重画当前三页
  */
-internal class PTQBookPageBitmapController(@IntRange(from = 1) val totalPage: Int) {
+internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: Int) {
 
     //记录前一页，当前页，后一页，如果current==0，则bitmapBuffer[0]为null。current==total同理
     private val bitmapBuffer = arrayOfNulls<Bitmap?>(3)
@@ -30,10 +30,6 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) val totalPage: In
             if (field != null) return
             field = value
         }
-
-//    init {
-//        calculateNeedBitmapPages(0)
-//    }
 
     private fun calculateNeedBitmapPages(page: Int) {
         if (page !in 0 until totalPage) return
@@ -61,11 +57,11 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) val totalPage: In
 
     fun refresh() {
         needBitmapAt(currentPage)
+        Log.d(TAG, "refresh: $totalPage")
     }
 
     fun getNeedPage(): Int {
         if (needBitmapPages.isEmpty()) calculateNeedBitmapPages(currentPage)
-
         return needBitmapPages.first().first
     }
 
@@ -76,6 +72,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) val totalPage: In
         }
 
         val first = needBitmapPages.first()
+
         needBitmapPages.removeAt(0)
         bitmapBuffer[first.second]?.recycle()
         bitmapBuffer[first.second] = bitmap

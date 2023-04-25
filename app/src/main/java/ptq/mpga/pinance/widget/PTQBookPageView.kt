@@ -27,29 +27,7 @@ data class PTQBookPageViewConfig(
 
 val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
 
-interface PTQBookPageViewScope {
-    /**
-     * 当用户有想翻页的操作时，会触发此回调。如果处于最后一页，仍想向右翻，则翻页失败，但此回调仍然会调用，可以利用这个回调弹Toast显示没有下一页了
-     * @param currentPage 用户操作之后的页面索引，范围是0~pageCount-1
-     * @param nextOrPrevious 用户想向前翻页还是向后翻页
-     * @param success 用户翻页是否成功，处于最后一页还想向右翻则翻页失败，处于第一页向前翻同理
-     */
-    fun onPageWantToChange(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit)
-
-    /**
-     * 页面的内容
-     * @param currentPage 表示当前显示的页面索引，范围是0~pageCount-1
-     * @param refresh 请在contents的最底部手动调用[refresh]以保证视图正确性
-     */
-    fun contents(block: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit)
-
-    /**
-     * 跳转到第几页
-     */
-    fun jumpTo(pageIndex: Int)
-}
-
-private class PTQBookPageViewScopeImpl(private val controller: PTQBookPageBitmapController) : PTQBookPageViewScope {
+private class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
     var contentsBlock: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
     var pageWantToChangeBlock: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
 
@@ -60,25 +38,19 @@ private class PTQBookPageViewScopeImpl(private val controller: PTQBookPageBitmap
     override fun contents(block: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit) {
         contentsBlock = block
     }
-
-    override fun jumpTo(pageIndex: Int) {
-        controller.needBitmapAt(pageIndex)
-    }
 }
 
 /**
  * @param modifier 修饰符
  * @param pageColor 背页页面颜色
- * @param pageCount 页面总数
+ * @param state 设置页面总数和当前页数，如果页面总数小于当前页数，则会引发异常，具体参见[PTQBookPageViewState]以及[rememberPTQBookPageViewState]
  * @param ptqBookPageViewScope 翻页器提供的各类回调 [PTQBookPageViewScope]
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun PTQBookPageView(
-    modifier: Modifier = Modifier, pageColor: Color = Color.White, @IntRange(from = 1) pageCount: Int = 1, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit
+    modifier: Modifier = Modifier, pageColor: Color = Color.White, state: PTQBookPageViewState, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit
 ) {
-    require(pageCount > 0) { "pageCount必须大于0" }
-
     Box(
         modifier.fillMaxSize()
     ) {
@@ -86,10 +58,15 @@ fun PTQBookPageView(
         var size by remember { mutableStateOf(IntSize.Zero) }
 
         val controller by remember {
-            mutableStateOf(PTQBookPageBitmapController(pageCount))
+            mutableStateOf(PTQBookPageBitmapController(state.pageCount))
         }
 
-        val ptqPageFlipperScopeImpl = rememberUpdatedState(newValue = PTQBookPageViewScopeImpl(controller).apply(ptqBookPageViewScope))
+        remember(state) {
+            controller.totalPage = state.pageCount
+            derivedStateOf {  }
+        }
+
+        val ptqPageFlipperScopeImpl = rememberUpdatedState(newValue = PTQBookPageViewScopeImpl().apply(ptqBookPageViewScope))
 
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -98,6 +75,7 @@ fun PTQBookPageView(
 
                     @Composable
                     override fun Content() {
+                        //重组触发器
                         var recomposeTrigger by remember { mutableStateOf(0L) }
 
                         controller.exeRecompositionBlock = {
@@ -111,12 +89,8 @@ fun PTQBookPageView(
                                     size = it
                                 }
                         ) {
-//                            ptqPageFlipperScopeImpl.value.contentsBlockBitmap(this, controller.getNeedPage(), controller.exeNeedBitmapAt)
-                            ptqPageFlipperScopeImpl.value.contentsBlock(this, controller.getNeedPage()) {
-                                controller.refresh()
-                            }
+                            ptqPageFlipperScopeImpl.value.contentsBlock(this, controller.getNeedPage()) { controller.refresh() }
                             Text(recomposeTrigger.toString(), color = Color.Transparent)
-
                             invalidate()
                         }
                     }
@@ -144,7 +118,7 @@ fun PTQBookPageView(
                     .clipToBounds()
             ) {
                 PTQBookPageViewInner(controller = controller, content = ptqPageFlipperScopeImpl.value.contentsBlock, onNext = {
-                    if (currentPage < pageCount - 1) {
+                    if (currentPage < controller.totalPage - 1) {
                         currentPage++
                         controller.needBitmapAt(currentPage)
                         ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(currentPage, true, true)
@@ -164,14 +138,3 @@ fun PTQBookPageView(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-

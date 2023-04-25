@@ -136,15 +136,15 @@ internal fun PTQBookPageViewInner(
     //当前页颜色
     val (pageColor) = LocalPTQBookPageViewConfig.current
     //12区域阴影颜色
-    val _shadow12Color = android.graphics.Color.toArgb(shadow12Color.value.toLong())
+    val nativeShadow12Color = android.graphics.Color.toArgb(shadow12Color.value.toLong())
     //3区阴影颜色
-    val _shadow3Color = android.graphics.Color.toArgb(shadow3Color.value.toLong())
+    val nativeShadow3Color = android.graphics.Color.toArgb(shadow3Color.value.toLong())
     //光泽阴影颜色
-    val _lustreColor = android.graphics.Color.toArgb(lustreColor.value.toLong())
+    val nativeLustreColor = android.graphics.Color.toArgb(lustreColor.value.toLong())
     //页面颜色
-    val _pageColor = android.graphics.Color.toArgb(pageColor.value.toLong())
+    val nativePageColor = android.graphics.Color.toArgb(pageColor.value.toLong())
     //透明色
-    val _transparentColor = android.graphics.Color.toArgb(Color.Transparent.value.toLong())
+    val nativeTransparentColor = android.graphics.Color.toArgb(Color.Transparent.value.toLong())
 
     //退出动画lambda
     val exeExitAnim = rememberUpdatedState {
@@ -461,8 +461,8 @@ internal fun PTQBookPageViewInner(
                             shaderControlPointPairs[2].first.y,
                             shaderControlPointPairs[2].second.x,
                             shaderControlPointPairs[2].second.y,
-                            _shadow3Color,
-                            _transparentColor,
+                            nativeShadow3Color,
+                            nativeTransparentColor,
                             Shader.TileMode.CLAMP
                         )
                     it.drawPath(shadowPaths[2], paint)
@@ -470,7 +470,7 @@ internal fun PTQBookPageViewInner(
 
                     //画当前页
                     frameworkPaint.shader = null
-                    frameworkPaint.color = _pageColor
+                    frameworkPaint.color = nativePageColor
                     it.drawPath(paths[0], paint)
                     nativeCanvas.drawBitmapMesh(distortBitmap, meshCounts[0], meshCounts[1], distortedVertices, 0, null, 0, frameworkPaint)
 
@@ -480,8 +480,8 @@ internal fun PTQBookPageViewInner(
                         shaderControlPointPairs[0].first.y,
                         shaderControlPointPairs[0].second.x,
                         shaderControlPointPairs[0].second.y,
-                        _shadow12Color,
-                        _transparentColor,
+                        nativeShadow12Color,
+                        nativeTransparentColor,
                         Shader.TileMode.CLAMP
                     )
                     it.drawPath(shadowPaths[0], paint)
@@ -492,20 +492,20 @@ internal fun PTQBookPageViewInner(
                         shaderControlPointPairs[1].first.y,
                         shaderControlPointPairs[1].second.x,
                         shaderControlPointPairs[1].second.y,
-                        _shadow12Color,
-                        _transparentColor,
+                        nativeShadow12Color,
+                        nativeTransparentColor,
                         Shader.TileMode.CLAMP
                     )
                     it.drawPath(shadowPaths[1], paint)
 
                     //画阴影区域4（圆弧）
                     frameworkPaint.shader =
-                        RadialGradient(shaderControlPointPairs[0].first.x, shaderControlPointPairs[0].first.y, shadow12Width, _shadow12Color, _transparentColor, Shader.TileMode.CLAMP)
+                        RadialGradient(shaderControlPointPairs[0].first.x, shaderControlPointPairs[0].first.y, shadow12Width, nativeShadow12Color, nativeTransparentColor, Shader.TileMode.CLAMP)
                     it.drawPath(shadowPaths[3], paint)
 
                     //画当前页背面
                     frameworkPaint.shader = null
-                    frameworkPaint.color = _pageColor
+                    frameworkPaint.color = nativePageColor
                     it.drawPath(paths[1], paint)
 
                     //画光泽左侧阴影
@@ -514,8 +514,8 @@ internal fun PTQBookPageViewInner(
                         shaderControlPointPairs[3].first.y,
                         shaderControlPointPairs[3].second.x,
                         shaderControlPointPairs[3].second.y,
-                        _lustreColor,
-                        _transparentColor,
+                        nativeLustreColor,
+                        nativeTransparentColor,
                         Shader.TileMode.CLAMP
                     )
                     it.drawPath(shadowPaths[4], paint)
@@ -526,8 +526,8 @@ internal fun PTQBookPageViewInner(
                         shaderControlPointPairs[4].first.y,
                         shaderControlPointPairs[4].second.x,
                         shaderControlPointPairs[4].second.y,
-                        _lustreColor,
-                        _lustreColor,
+                        nativeLustreColor,
+                        nativeLustreColor,
                         Shader.TileMode.CLAMP
                     )
                     it.drawPath(shadowPaths[5], paint)
@@ -1119,8 +1119,7 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
 }
 
 /**
- * 获取Bitmap扭曲后的格点
- * @receiver 相对坐标系
+ * 获取Bitmap扭曲后的格点，相对坐标系
  * @return 第一个数组表示扭曲后边界格点[NVJ, ZTN, WSM, MUI]，第二个数组表示扭曲后格点，第三个数组表示扭曲格子数[宽，高]
  */
 private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsideDown: Boolean): Triple<Array<List<Float>>, FloatArray, Array<Int>> {
@@ -1232,7 +1231,10 @@ private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsid
     return Triple(arrayOf(NVJPoints, ZTNPoints, WSMPoints, MUIPoints), vertices, arrayOf(meshWidthCount, meshHeightCount))
 }
 
-//处理翻转，绝对系
+/**
+ * 绝对系下处理手势翻转
+ * @param line 屏幕中垂线
+ */
 private fun DragEvent.getSymmetricalDragEventAbout(line: Line): DragEvent {
     val origin = originTouchPoint.getSymmetricalPointAbout(line)
     val current = currentTouchPoint.getSymmetricalPointAbout(line)
@@ -1323,10 +1325,18 @@ private data class Point(var x: Float, var y: Float) {
 
     operator fun rangeTo(a: Point) = Point(0.5f * (x + a.x), 0.5f * (y + a.y))
 
+    /**
+     * 将相对系坐标转换为绝对系坐标 注意：此this为绝对原点
+     * @param absX 要转换的点
+     * @param this 绝对原点
+     * @return 绝对系坐标
+     */
     fun absScreenSystemWith(absX: Point) = Point(absX.x + x, -absX.y + y)
 
     /**
-     * 坐标系坐标，y与系统y坐标相反，且原点为相对原点
+     * 将绝对系坐标转换为相对系坐标，y与系统y坐标相反，且原点为相对原点
+     * @param absO 绝对原点
+     * @return 相对系坐标
      */
     fun inCoordinateSystem(absO: Point) = (this - absO).reverseY
 
