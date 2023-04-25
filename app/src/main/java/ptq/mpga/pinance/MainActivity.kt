@@ -74,12 +74,14 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
 
-                    var state by rememberPTQBookPageViewState(pageCount = 100)
+                    var state by rememberPTQBookPageViewState(pageCount = 100, currentPage = 0)
 
                     PTQBookPageView(state = state, ptqBookPageViewScope = {
-                        onPageWantToChange { _, nextOrPrevious, success ->
+                        onPageWantToChange { currentPage, nextOrPrevious, success ->
                             if (!success) {
                                 Toast.makeText(this@MainActivity, if (nextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
+                            } else {
+                                state = state.copy(currentPage = if (nextOrPrevious) currentPage + 1 else currentPage - 1)
                             }
                         }
 
@@ -108,13 +110,22 @@ class MainActivity : AppCompatActivity() {
                                 ) {
                                     Text(text = (index + 1).toString() + " / " + state.pageCount)
                                     Button(
-                                        onClick = {
-//                                            all[index] = allList.random()
-                                                  state = state.copy(pageCount = (5..15).toMutableList().random())
-                                                  }, modifier = Modifier
+                                        onClick = { all[index] = allList.random() }, modifier = Modifier
                                             .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
                                     ) {
                                         Text("换一张")
+                                    }
+                                    Button(
+                                        onClick = { state = state.copy(currentPage = (0 until state.pageCount).toMutableList().random()) }, modifier = Modifier
+                                            .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
+                                    ) {
+                                        Text("随机翻页")
+                                    }
+                                    Button(
+                                        onClick = { state = state.copy(pageCount = (5..15).toMutableList().random()) }, modifier = Modifier
+                                            .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
+                                    ) {
+                                        Text("改变总页数")
                                     }
                                 }
                             }

@@ -54,15 +54,19 @@ fun PTQBookPageView(
     Box(
         modifier.fillMaxSize()
     ) {
-        var currentPage by remember { mutableStateOf(0) }
         var size by remember { mutableStateOf(IntSize.Zero) }
 
         val controller by remember {
             mutableStateOf(PTQBookPageBitmapController(state.pageCount))
         }
 
+        val currentPage by remember(state) { mutableStateOf(state.currentPage) }
+
         remember(state) {
             controller.totalPage = state.pageCount
+            currentPage?.let {
+                controller.needBitmapAt(it)
+            }
             derivedStateOf {  }
         }
 
@@ -118,21 +122,19 @@ fun PTQBookPageView(
                     .clipToBounds()
             ) {
                 PTQBookPageViewInner(controller = controller, content = ptqPageFlipperScopeImpl.value.contentsBlock, onNext = {
-                    if (currentPage < controller.totalPage - 1) {
-                        currentPage++
-                        controller.needBitmapAt(currentPage)
-                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(currentPage, true, true)
-                        return@PTQBookPageViewInner
+                    if (currentPage == null && controller.currentPage < controller.totalPage - 1) {
+                        controller.needBitmapAt(controller.currentPage + 1)
+                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, true, true)
+                    } else {
+                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
                     }
-                    ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(currentPage, true, false)
                 }, onPrevious = {
-                    if (currentPage > 0) {
-                        currentPage--
-                        controller.needBitmapAt(currentPage)
-                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(currentPage, false, true)
-                        return@PTQBookPageViewInner
+                    if (currentPage == null && controller.currentPage > 0) {
+                        controller.needBitmapAt(controller.currentPage - 1)
+                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, false, true)
+                    } else {
+                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, false, controller.currentPage > 0)
                     }
-                    ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(currentPage, false, false)
                 })
             }
         }
