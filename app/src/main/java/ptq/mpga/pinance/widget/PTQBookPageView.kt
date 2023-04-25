@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.AbstractComposeView
@@ -30,6 +31,8 @@ val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { err
 private class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
     var contentsBlock: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
     var pageWantToChangeBlock: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
+    var onTapBehavior: ((leftUp: Offset, rightDown: Offset, touchPoint: Offset) -> Boolean?)? = null
+    var onDragBehavior: ((leftUp: Offset, rightDown: Offset, startTouchPoint: Offset, endTouchPoint: Offset, isRightToLeft: Boolean) -> Boolean)? = null
 
     override fun onPageWantToChange(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit) {
         pageWantToChangeBlock = block
@@ -37,6 +40,14 @@ private class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
 
     override fun contents(block: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit) {
         contentsBlock = block
+    }
+
+    override fun onTapBehavior(block: (leftUp: Offset, rightDown: Offset, touchPoint: Offset) -> Boolean?) {
+        onTapBehavior = block
+    }
+
+    override fun onDragBehavior(block: (leftUp: Offset, rightDown: Offset, startTouchPoint: Offset, endTouchPoint: Offset, isRightToLeft: Boolean) -> Boolean) {
+        onDragBehavior = block
     }
 }
 

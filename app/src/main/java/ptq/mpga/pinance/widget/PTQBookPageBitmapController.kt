@@ -50,6 +50,8 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
     }
 
     fun needBitmapAt(page: Int) {
+        //这个机制在高速刷新状态时有可能会出错，needBitmapPages也许还没清空，导致needBitmap需求被拒绝，不能正确刷新状态
+        //但是为了一般情况下的性能，似乎只能这么做了
         if (needBitmapPages.isNotEmpty()) return
         calculateNeedBitmapPages(page)
         exeRecompositionBlock?.let { it() }
@@ -57,7 +59,6 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
 
     fun refresh() {
         needBitmapAt(currentPage)
-        Log.d(TAG, "refresh: $totalPage")
     }
 
     fun getNeedPage(): Int {
@@ -92,5 +93,4 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
     }
 
     fun isRenderOk() = needBitmapPages.isEmpty()
-
 }
