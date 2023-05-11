@@ -3,16 +3,12 @@ package ptq.mpga.pinance.widget
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
-import android.util.Log
-import androidx.annotation.IntRange
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.AbstractComposeView
@@ -24,30 +20,36 @@ private const val TAG = "PTQBookPageView"
 
 data class PTQBookPageViewConfig(
     val pageColor: Color,
+    val disabled: Boolean
 )
 
 val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
 
-private class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
-    var contentsBlock: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
-    var pageWantToChangeBlock: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
-    var onTapBehavior: ((leftUp: Offset, rightDown: Offset, touchPoint: Offset) -> Boolean?)? = null
-    var onDragBehavior: ((leftUp: Offset, rightDown: Offset, startTouchPoint: Offset, endTouchPoint: Offset, isRightToLeft: Boolean) -> Boolean)? = null
+internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
+    var contents: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
+    var onPageWantToChange: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
+    var tapBehavior: ((leftUp: Point, rightDown: Point, touchPoint: Point) -> Boolean?)? = null
+    var dragBehavior: ((leftUp: Point, rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>)? = null
+    var responseDragWhen: ((leftUp: Point, rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)? = null
 
-    override fun onPageWantToChange(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit) {
-        pageWantToChangeBlock = block
+    override fun onUserWantToChange(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit) {
+        onPageWantToChange = block
     }
 
     override fun contents(block: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit) {
-        contentsBlock = block
+        contents = block
     }
 
-    override fun onTapBehavior(block: (leftUp: Offset, rightDown: Offset, touchPoint: Offset) -> Boolean?) {
-        onTapBehavior = block
+    override fun tapBehavior(block: (leftUp: Point, rightDown: Point, touchPoint: Point) -> Boolean?) {
+        tapBehavior = block
     }
 
-    override fun onDragBehavior(block: (leftUp: Offset, rightDown: Offset, startTouchPoint: Offset, endTouchPoint: Offset, isRightToLeft: Boolean) -> Boolean) {
-        onDragBehavior = block
+    override fun responseDragWhen(block: (leftUp: Point, rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?) {
+        responseDragWhen = block
+    }
+
+    override fun dragBehavior(block: (leftUp: Point, rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>) {
+        dragBehavior = block
     }
 }
 
@@ -71,17 +73,15 @@ fun PTQBookPageView(
             mutableStateOf(PTQBookPageBitmapController(state.pageCount))
         }
 
-        val currentPage by remember(state) { mutableStateOf(state.currentPage) }
-
         remember(state) {
             controller.totalPage = state.pageCount
-            currentPage?.let {
+            state.currentPage?.let {
                 controller.needBitmapAt(it)
             }
-            derivedStateOf {  }
+            mutableStateOf(state)
         }
 
-        val ptqPageFlipperScopeImpl = rememberUpdatedState(newValue = PTQBookPageViewScopeImpl().apply(ptqBookPageViewScope))
+        val callbacks = rememberUpdatedState(PTQBookPageViewScopeImpl().apply(ptqBookPageViewScope))
 
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -104,8 +104,9 @@ fun PTQBookPageView(
                                     size = it
                                 }
                         ) {
-                            ptqPageFlipperScopeImpl.value.contentsBlock(this, controller.getNeedPage()) { controller.refresh() }
-                            Text(recomposeTrigger.toString(), color = Color.Transparent)
+                            callbacks.value.contents(this, controller.getNeedPage()) { controller.refresh() }
+                            recomposeTrigger
+//                            Text(recomposeTrigger.toString(), color = Color.Transparent)
                             invalidate()
                         }
                     }
@@ -123,7 +124,7 @@ fun PTQBookPageView(
         )
 
         CompositionLocalProvider(
-            LocalPTQBookPageViewConfig provides PTQBookPageViewConfig(pageColor = pageColor)
+            LocalPTQBookPageViewConfig provides PTQBookPageViewConfig(pageColor = pageColor, disabled = state.disabled)
         ) {
             Box(
                 Modifier
@@ -132,19 +133,19 @@ fun PTQBookPageView(
                     .align(Alignment.Center)
                     .clipToBounds()
             ) {
-                PTQBookPageViewInner(controller = controller, content = ptqPageFlipperScopeImpl.value.contentsBlock, onNext = {
-                    if (currentPage == null && controller.currentPage < controller.totalPage - 1) {
+                PTQBookPageViewInner(controller = controller, callbacks = callbacks.value, onNext = {
+                    if (state.currentPage == null && controller.currentPage < controller.totalPage - 1) {
                         controller.needBitmapAt(controller.currentPage + 1)
-                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, true, true)
+                        callbacks.value.onPageWantToChange(controller.currentPage, true, true)
                     } else {
-                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
+                        callbacks.value.onPageWantToChange(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
                     }
                 }, onPrevious = {
-                    if (currentPage == null && controller.currentPage > 0) {
+                    if (state.currentPage == null && controller.currentPage > 0) {
                         controller.needBitmapAt(controller.currentPage - 1)
-                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, false, true)
+                        callbacks.value.onPageWantToChange(controller.currentPage, false, true)
                     } else {
-                        ptqPageFlipperScopeImpl.value.pageWantToChangeBlock(controller.currentPage, false, controller.currentPage > 0)
+                        callbacks.value.onPageWantToChange(controller.currentPage, false, controller.currentPage > 0)
                     }
                 })
             }
