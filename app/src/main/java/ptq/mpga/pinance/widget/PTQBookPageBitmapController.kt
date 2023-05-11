@@ -23,13 +23,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
 
     //当前页面
     var currentPage = 0
-    private set
-
-    //用于判断是否是立刻绘制当前页面的标记
-    var immediatelyRender = false
-    private set
-
-    private var immediatelyRenderOk: () -> Unit = {}
+        private set
 
     var exeRecompositionBlock: (() -> Unit)? = null
         set(value) {
@@ -47,7 +41,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
         if (page > 0) {
             needs.add(Pair(page - 1, 0))
         }
-//        needs.add(Pair(page, 1))
+        needs.add(Pair(page, 1))
         if (page < totalPage - 1) {
             needs.add(Pair(page + 1, 2))
         }
@@ -61,15 +55,6 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
         if (needBitmapPages.isNotEmpty()) return
         calculateNeedBitmapPages(page)
         exeRecompositionBlock?.let { it() }
-    }
-
-    fun immediatelyNeedCurrent(onOk: () -> Unit) {
-        needBitmapPages.add(Pair(currentPage, 1))
-        immediatelyRender = true
-        immediatelyRenderOk = onOk
-        if (needBitmapPages.size == 1) {
-            exeRecompositionBlock?.let { it() }
-        }
     }
 
     fun refresh() {
@@ -92,11 +77,6 @@ internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: In
         needBitmapPages.removeAt(0)
         bitmapBuffer[first.second]?.recycle()
         bitmapBuffer[first.second] = bitmap
-
-        if (immediatelyRender && first.first == currentPage) {
-            immediatelyRender = false
-            immediatelyRenderOk()
-        }
 
         if (needBitmapPages.isEmpty()) return
         exeRecompositionBlock?.let { it() }
