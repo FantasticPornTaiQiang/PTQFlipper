@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.contentColorFor
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -272,6 +273,8 @@ internal fun PTQBookPageViewInner(
                     }
                 }
 
+                Log.d(TAG, "PTQBookPageViewInner: isNextOrPrevious $isNextOrPrevious ")
+
                 if (isNextOrPrevious == true) onNext() else if (isNextOrPrevious == false) onPrevious()
                 isNextOrPrevious = null
             }
@@ -287,46 +290,48 @@ internal fun PTQBookPageViewInner(
                     return@detectTapGestures
                 }
 
-                val touchPoint = offset.toPoint
-                val tapYDelta = leftUpOnTap.y
+                controller.immediatelyNeedCurrent {
+                    val touchPoint = offset.toPoint
+                    val tapYDelta = leftUpOnTap.y
 
-                //最顶上预留tapYDelta的距离
-                if (touchPoint.y > tapYDelta) {
-                    val onTapBehavior = callbacks.tapBehavior
+                    //最顶上预留tapYDelta的距离
+                    if (touchPoint.y > tapYDelta) {
+                        val onTapBehavior = callbacks.tapBehavior
 
-                    val isLeftToRight = if (onTapBehavior == null) {
-                        touchPoint.x < 0.5f * screenWidth
-                    } else {
-                        val result = onTapBehavior(leftUpOnTap.copy(), absC.copy(), touchPoint.copy())
-
-                        if (result == null) {
-                            return@detectTapGestures
+                        val isLeftToRight = if (onTapBehavior == null) {
+                            touchPoint.x < 0.5f * screenWidth
                         } else {
-                            !result
+                            val result = onTapBehavior(leftUpOnTap.copy(), absC.copy(), touchPoint.copy())
+
+                            if (result == null) {
+                                return@immediatelyNeedCurrent
+                            } else {
+                                !result
+                            }
                         }
+
+                        if (controller.currentPage >= controller.totalPage - 1 && !isLeftToRight) {
+                            onNext()
+                            return@immediatelyNeedCurrent
+                        }
+
+                        if (controller.currentPage <= 0 && isLeftToRight) {
+                            onPrevious()
+                            return@immediatelyNeedCurrent
+                        }
+
+                        val startPoint = Point(x = if (isLeftToRight) -dragXRange.end * 0.5f else dragXRange.end, y = if (isLeftToRight) touchPoint.y - tapYDelta else touchPoint.y)
+                        f = screenHeight - touchPoint.y.absoluteValue
+                        val endPoint = Point(x = if (isLeftToRight) dragXRange.end else -dragXRange.end * 0.5f, y = if (isLeftToRight) touchPoint.y else touchPoint.y - tapYDelta)
+                        animLastPoint = startPoint.copy()
+                        animStartAndEndPoint = DragEvent(startPoint.copy(), endPoint.copy())
+                        pageState = PageState.Loose
+                        animDuration = arrayOf(animEnterDuration, animEnterDuration + animExitDuration)
+                        state = State.ExitAnimStart
+
+                        isRightToLeftWhenStart = !isLeftToRight
+                        isNextOrPrevious = !isLeftToRight
                     }
-
-                    if (controller.currentPage >= controller.totalPage - 1 && !isLeftToRight) {
-                        onNext()
-                        return@detectTapGestures
-                    }
-
-                    if (controller.currentPage <= 0 && isLeftToRight) {
-                        onPrevious()
-                        return@detectTapGestures
-                    }
-
-                    val startPoint = Point(x = if (isLeftToRight) -dragXRange.end * 0.5f else dragXRange.end, y = if (isLeftToRight) touchPoint.y - tapYDelta else touchPoint.y)
-                    f = screenHeight - touchPoint.y.absoluteValue
-                    val endPoint = Point(x = if (isLeftToRight) dragXRange.end else -dragXRange.end * 0.5f, y = if (isLeftToRight) touchPoint.y else touchPoint.y - tapYDelta)
-                    animLastPoint = startPoint.copy()
-                    animStartAndEndPoint = DragEvent(startPoint.copy(), endPoint.copy())
-                    pageState = PageState.Loose
-                    animDuration = arrayOf(animEnterDuration, animEnterDuration + animExitDuration)
-                    state = State.ExitAnimStart
-
-                    isRightToLeftWhenStart = !isLeftToRight
-                    isNextOrPrevious = !isLeftToRight
                 }
             }
         }
@@ -336,6 +341,8 @@ internal fun PTQBookPageViewInner(
                     if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || config.value().disabled) {
                         return@detectDragGestures
                     }
+
+                    controller.immediatelyNeedCurrent { }
 
                     val touchPoint = offset.toPoint
                     dragInitialPoint = offset.toPoint
@@ -347,17 +354,12 @@ internal fun PTQBookPageViewInner(
                     time = System.currentTimeMillis()
                 },
                 onDrag = { _: PointerInputChange, dragAmount: Offset ->
-                    if (!controller.isRenderOk() || config.value().disabled) {
+                    if (config.value().disabled) {
                         return@detectDragGestures
                     }
 
                     val cur = (curDragEvent.currentTouchPoint + dragAmount.toPoint)
                     curDragEvent = DragEvent(curDragEvent.currentTouchPoint.copy(), cur)
-
-                    if (!dragXRange.contains(cur.x)) {
-                        onDragEnd.value()
-                        return@detectDragGestures
-                    }
 
                     if (state == State.Idle) {
                         if (System.currentTimeMillis() - time > animStartTimeout) {
@@ -365,6 +367,10 @@ internal fun PTQBookPageViewInner(
                                     .directionToOInCoordinateSystem()
                                     .isIn(DragDirection.up, DragDirection.down, DragDirection.static)
                             ) {
+                                return@detectDragGestures
+                            }
+
+                            if (!controller.isRenderOk()) {
                                 return@detectDragGestures
                             }
 
@@ -384,6 +390,8 @@ internal fun PTQBookPageViewInner(
                                 return@detectDragGestures
                             }
 
+                            isRightToLeftWhenStart = isRightToLeft
+
                             //如果是第一页或者最后一页，直接return，之后松手就会触发onDragEnd，且state=State.Idle
                             if ((isRightToLeft && controller.currentPage >= controller.totalPage - 1) ||
                                 (!isRightToLeft && controller.currentPage <= 0)
@@ -392,7 +400,6 @@ internal fun PTQBookPageViewInner(
                             }
 
                             animStartAndEndPoint.originTouchPoint.x = if (isRightToLeft) dragXRange.end else dragXRange.start
-                            isRightToLeftWhenStart = isRightToLeft
 
                             //默认向上翻，如果向下则颠倒
                             val isUpToDown = animStartAndEndPoint.currentTouchPoint.y > animStartAndEndPoint.originTouchPoint.y
@@ -407,6 +414,11 @@ internal fun PTQBookPageViewInner(
                     }
 
                     if (state == State.Draggable) {
+                        if (!dragXRange.contains(cur.x)) {
+                            onDragEnd.value()
+                            return@detectDragGestures
+                        }
+
                         val dragEvent = if (upsideDown) curDragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else curDragEvent
 
                         if (pageState == PageState.Tight) {
@@ -416,7 +428,8 @@ internal fun PTQBookPageViewInner(
                     }
                 },
                 onDragEnd = {
-                    if (!interruptedInDrag) {
+                    if (!interruptedInDrag || config.value().disabled) {
+                        Log.d(TAG, "PTQBookPageViewInner: ${controller.immediatelyRender} $state")
                         onDragEnd.value()
                     }
                 }
@@ -424,9 +437,11 @@ internal fun PTQBookPageViewInner(
         }
         .background(color = pageColor)
     ) {
+        Log.d(TAG, "PTQBookPageViewInner1234: $state $animFloatRatio")
         if (state == State.Idle) {
             callbacks.contents(this, controller.currentPage) {}
         } else {
+            Log.d(TAG, "PTQBookPageViewInner123: $state")
             //如果正在动画，则使用动画的animDragEvent，否则使用拖动的
             var dragEvent = when (state) {
                 State.EnterAnimStart, State.ExitAnimStart -> {

@@ -2,6 +2,7 @@ package ptq.mpga.pinance
 
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
@@ -52,6 +54,7 @@ class MainActivity : AppCompatActivity() {
 
                     var state by rememberPTQBookPageViewState(pageCount = 100, currentPage = 0, disabled = false)
                     var color by remember { mutableStateOf(Color.White) }
+                    val lazyColumnState = rememberLazyListState()
 
                     PTQBookPageView(pageColor = color, state = state, ptqBookPageViewScope = {
                         onUserWantToChange { currentPage, isNextOrPrevious, success ->
@@ -71,20 +74,21 @@ class MainActivity : AppCompatActivity() {
                             return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
                         }
 
-                        dragBehavior { leftUp, rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
-                            val isFingerAtRight = lastTouchPoint.x > (rightDown - leftUp).x / 2
-
-                            var isNext: Boolean? = null
-                            if (isRightToLeftWhenStart && !isFingerAtRight) {
-                                isNext = true
-                            }
-
-                            if (!isRightToLeftWhenStart && isFingerAtRight) {
-                                isNext = false
-                            }
-
-                            return@dragBehavior Pair(!isFingerAtRight, isNext)
-                        }
+//                        dragBehavior { leftUp, rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
+//                            val isFingerAtRight = lastTouchPoint.x > (rightDown - leftUp).x / 2
+//
+//                            var isNext: Boolean? = null
+//
+//                            if (isRightToLeftWhenStart && !isFingerAtRight) {
+//                                isNext = true
+//                            }
+//
+//                            if (!isRightToLeftWhenStart && isFingerAtRight) {
+//                                isNext = false
+//                            }
+//
+//                            return@dragBehavior Pair(!isFingerAtRight, isNext)
+//                        }
 
                         contents { index, refresh ->
                             Box(
@@ -102,7 +106,7 @@ class MainActivity : AppCompatActivity() {
                                     index < /*all.size + */3 -> {
                                         when (index) {
                                             /*all.size + 1*/0 -> {
-                                                LazyColumn {
+                                                LazyColumn(state = lazyColumnState) {
                                                     item {
                                                         Text(text + text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
                                                     }

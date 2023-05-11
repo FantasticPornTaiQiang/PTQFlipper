@@ -3,6 +3,7 @@ package ptq.mpga.pinance.widget
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -106,7 +107,7 @@ fun PTQBookPageView(
                         ) {
                             callbacks.value.contents(this, controller.getNeedPage()) { controller.refresh() }
                             recomposeTrigger
-//                            Text(recomposeTrigger.toString(), color = Color.Transparent)
+                            Log.d(TAG, "Content: aaaaaa")
                             invalidate()
                         }
                     }
@@ -114,6 +115,7 @@ fun PTQBookPageView(
                     override fun dispatchDraw(canvas: Canvas?) {
                         if (width == 0 || height == 0) return
                         val source = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        Log.d(TAG, "dispatchDraw: aaa")
                         val canvas2 = Canvas(source)
                         super.dispatchDraw(canvas2)
                         canvas2.setBitmap(null)
