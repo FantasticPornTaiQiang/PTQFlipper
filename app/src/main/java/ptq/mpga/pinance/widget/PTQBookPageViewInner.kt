@@ -91,12 +91,16 @@ internal fun PTQBookPageViewInner(
     onNext: () -> Unit = {},
     onPrevious: () -> Unit = {}
 ) {
+    //配置
     val localConfig = LocalPTQBookPageViewConfig.current
 
-    //配置
-    val config = rememberUpdatedState {
-        return@rememberUpdatedState localConfig
-    }
+    //手势监听的lambda中需要
+//    val config by remember {
+//        val block = {
+//            return@mutableStateOf localConfig
+//        }
+//        mutableStateOf()
+//    }
 
     //组件宽高和原点O
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
@@ -156,7 +160,7 @@ internal fun PTQBookPageViewInner(
     var time by remember { mutableStateOf(0L) }
 
     //页面颜色
-    val pageColor by remember { derivedStateOf { config.value().pageColor } }
+    val pageColor = localConfig.pageColor
     //12区域阴影颜色
     val nativeShadow12Color by remember { mutableStateOf(android.graphics.Color.toArgb(shadow12Color.value.toLong())) }
     //3区阴影颜色
@@ -164,7 +168,7 @@ internal fun PTQBookPageViewInner(
     //光泽阴影颜色
     val nativeLustreColor by remember { mutableStateOf(android.graphics.Color.toArgb(lustreColor.value.toLong())) }
     //页面颜色
-    val nativePageColor by remember { derivedStateOf { android.graphics.Color.toArgb(pageColor.value.toLong()) } }
+    val nativePageColor by remember(pageColor) { mutableStateOf(android.graphics.Color.toArgb(pageColor.value.toLong())) }
     //透明色
     val nativeTransparentColor by remember { mutableStateOf(android.graphics.Color.toArgb(Color.Transparent.value.toLong())) }
 
@@ -281,9 +285,9 @@ internal fun PTQBookPageViewInner(
 
     Box(modifier = Modifier
         .fillMaxSize()
-        .pointerInput(Unit) {
+        .pointerInput(localConfig) {
             detectTapGestures { offset: Offset ->
-                if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || config.value().disabled) {
+                if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || localConfig.disabled) {
                     return@detectTapGestures
                 }
 
@@ -330,10 +334,10 @@ internal fun PTQBookPageViewInner(
                 }
             }
         }
-        .pointerInput(Unit) {
+        .pointerInput(localConfig) {
             detectDragGestures(
                 onDragStart = { offset: Offset ->
-                    if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || config.value().disabled) {
+                    if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || localConfig.disabled) {
                         return@detectDragGestures
                     }
 
@@ -347,7 +351,7 @@ internal fun PTQBookPageViewInner(
                     time = System.currentTimeMillis()
                 },
                 onDrag = { _: PointerInputChange, dragAmount: Offset ->
-                    if (!controller.isRenderOk() || config.value().disabled) {
+                    if (!controller.isRenderOk() || localConfig.disabled) {
                         return@detectDragGestures
                     }
 
@@ -417,9 +421,11 @@ internal fun PTQBookPageViewInner(
                     }
                 },
                 onDragEnd = {
-                    if (!interruptedInDrag) {
-                        onDragEnd.value()
+                    if (interruptedInDrag || localConfig.disabled) {
+                        return@detectDragGestures
                     }
+
+                    onDragEnd.value()
                 }
             )
         }

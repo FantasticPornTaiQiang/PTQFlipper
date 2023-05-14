@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
+import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
 
 private const val TAG = "PTQBookPageMainActivity"
@@ -50,10 +51,10 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
 
-                    var state by rememberPTQBookPageViewState(pageCount = 100, currentPage = 0, disabled = false)
-                    var color by remember { mutableStateOf(Color.White) }
+                    var state by rememberPTQBookPageViewState(pageCount = 100, currentPage = 0)
+                    var config by rememberPTQBookPageViewConfig()
 
-                    PTQBookPageView(pageColor = color, state = state, ptqBookPageViewScope = {
+                    PTQBookPageView(config = config, state = state, ptqBookPageViewScope = {
                         onUserWantToChange { currentPage, isNextOrPrevious, success ->
                             if (!success) {
                                 Toast.makeText(this@MainActivity, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
@@ -90,7 +91,7 @@ class MainActivity : AppCompatActivity() {
                             Box(
                                 Modifier
                                     .fillMaxSize()
-                                    .background(color)) {
+                                    .background(config.pageColor)) {
                                 when {
 //                                    index < all.size -> {
 //                                        Image(
@@ -147,7 +148,7 @@ class MainActivity : AppCompatActivity() {
                                             Text("换一张")
                                         }
                                         Button(
-                                            onClick = { color = pageColorList.random() }, modifier = Modifier
+                                            onClick = { config = config.copy(pageColor = pageColorList.random()) }, modifier = Modifier
                                                 .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
                                         ) {
                                             Text("换个底色")
@@ -159,10 +160,10 @@ class MainActivity : AppCompatActivity() {
                                             Text("随机翻页")
                                         }
                                         Button(
-                                            onClick = { state = state.copy(disabled = !state.disabled) }, modifier = Modifier
+                                            onClick = { config = config.copy(disabled = !config.disabled) }, modifier = Modifier
                                                 .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
                                         ) {
-                                            Text(if (!state.disabled) "禁用翻页" else "启用翻页")
+                                            Text(if (!config.disabled) "禁用翻页" else "启用翻页")
                                         }
                                         Button(
                                             onClick = { state = state.copy(pageCount = index + (1..100).toMutableList().random()) }, modifier = Modifier

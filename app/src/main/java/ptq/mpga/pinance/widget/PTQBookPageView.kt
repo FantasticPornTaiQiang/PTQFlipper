@@ -3,6 +3,7 @@ package ptq.mpga.pinance.widget
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -19,8 +20,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 private const val TAG = "PTQBookPageView"
 
 data class PTQBookPageViewConfig(
-    val pageColor: Color,
-    val disabled: Boolean
+    val pageColor: Color = Color.White,
+    val disabled: Boolean = false
 )
 
 val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
@@ -62,7 +63,7 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun PTQBookPageView(
-    modifier: Modifier = Modifier, pageColor: Color = Color.White, state: PTQBookPageViewState, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit
+    modifier: Modifier = Modifier, config: PTQBookPageViewConfig = PTQBookPageViewConfig(), state: PTQBookPageViewState, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit
 ) {
     Box(
         modifier.fillMaxSize()
@@ -101,6 +102,7 @@ fun PTQBookPageView(
                             Modifier
                                 .wrapContentSize()
                                 .onSizeChanged {
+                                    Log.d(TAG, "Content: aaaaa")
                                     size = it
                                 }
                         ) {
@@ -122,9 +124,11 @@ fun PTQBookPageView(
                 }
             }
         )
+        Log.d(TAG, "PTQBookPageView: q")
 
+        //貌似必须包裹在CompositionLocalProvider，否则就会不断重组，没想通为什么
         CompositionLocalProvider(
-            LocalPTQBookPageViewConfig provides PTQBookPageViewConfig(pageColor = pageColor, disabled = state.disabled)
+            LocalPTQBookPageViewConfig provides config
         ) {
             Box(
                 Modifier
@@ -133,22 +137,29 @@ fun PTQBookPageView(
                     .align(Alignment.Center)
                     .clipToBounds()
             ) {
-                PTQBookPageViewInner(controller = controller, callbacks = callbacks.value, onNext = {
-                    if (state.currentPage == null && controller.currentPage < controller.totalPage - 1) {
-                        controller.needBitmapAt(controller.currentPage + 1)
-                        callbacks.value.onPageWantToChange(controller.currentPage, true, true)
-                    } else {
-                        callbacks.value.onPageWantToChange(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
+                PTQBookPageViewInner(
+                    controller = controller,
+                    callbacks = callbacks.value,
+                    onNext = {
+                        if (state.currentPage == null && controller.currentPage < controller.totalPage - 1) {
+                            controller.needBitmapAt(controller.currentPage + 1)
+                            callbacks.value.onPageWantToChange(controller.currentPage, true, true)
+                        } else {
+                            callbacks.value.onPageWantToChange(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
+                        }
+                    }, onPrevious = {
+                        if (state.currentPage == null && controller.currentPage > 0) {
+                            controller.needBitmapAt(controller.currentPage - 1)
+                            callbacks.value.onPageWantToChange(controller.currentPage, false, true)
+                        } else {
+                            callbacks.value.onPageWantToChange(controller.currentPage, false, controller.currentPage > 0)
+                        }
                     }
-                }, onPrevious = {
-                    if (state.currentPage == null && controller.currentPage > 0) {
-                        controller.needBitmapAt(controller.currentPage - 1)
-                        callbacks.value.onPageWantToChange(controller.currentPage, false, true)
-                    } else {
-                        callbacks.value.onPageWantToChange(controller.currentPage, false, controller.currentPage > 0)
-                    }
-                })
+                )
             }
         }
+
     }
 }
+
+
