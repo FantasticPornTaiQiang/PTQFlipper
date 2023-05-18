@@ -14,25 +14,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.AbstractComposeView
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 private const val TAG = "PTQBookPageView"
-
-data class PTQBookPageViewConfig(
-    val pageColor: Color = Color.White,
-    val disabled: Boolean = false,
-//    internal var screenHeight: Float = 0f,
-//    internal var screenWidth: Float = 0f,
-)
-
-val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
 
 internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
     var contents: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
@@ -63,9 +49,9 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
 }
 
 /**
- * @param modifier 修饰符
- * @param pageColor 背页页面颜色
- * @param state 设置页面总数和当前页数，如果页面总数小于当前页数，则会引发异常，具体参见[PTQBookPageViewState]以及[rememberPTQBookPageViewState]
+ * @param modifier 修饰符[支持以padding方式设置组件位置和大小，或以height和width方式设置大小，不支持offset和size修饰符]
+ * @param config 组件配置，请使用[rememberPTQBookPageViewConfig]
+ * @param state 组件状态，请使用[rememberPTQBookPageViewState]
  * @param ptqBookPageViewScope 翻页器提供的各类回调 [PTQBookPageViewScope]
  */
 @RequiresApi(Build.VERSION_CODES.O)
@@ -73,14 +59,9 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
 fun PTQBookPageView(
     modifier: Modifier = Modifier, config: PTQBookPageViewConfig = PTQBookPageViewConfig(), state: PTQBookPageViewState, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit
 ) {
-//    val screenH = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
-//    val screenW = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-
     Box(
         modifier.fillMaxSize()
     ) {
-//        var size by remember { mutableStateOf(IntSize.Zero) }
-
         val controller by remember {
             mutableStateOf(PTQBookPageBitmapController(state.pageCount))
         }
@@ -111,15 +92,10 @@ fun PTQBookPageView(
 
                         Box(
                             Modifier
-                                .wrapContentSize()
-//                                .onSizeChanged {
-//                                    Log.d(TAG, "Content: aaaaa")
-//                                    size = it
-//                                }
-                        ) {
+                                .fillMaxSize()
+                                .align(Alignment.Center)) {
                             callbacks.value.contents(this, controller.getNeedPage()) { controller.refresh() }
                             recomposeTrigger
-//                            Text(recomposeTrigger.toString(), color = Color.Transparent)
                             invalidate()
                         }
                     }
@@ -139,24 +115,21 @@ fun PTQBookPageView(
 
         //貌似必须包裹在CompositionLocalProvider，否则就会不断重组，没想通为什么
         CompositionLocalProvider(
-            LocalPTQBookPageViewConfig provides (config.apply {
-//                screenHeight = screenH
-//                screenWidth = screenW
-            })
+            LocalPTQBookPageViewConfig provides config
         ) {
             var position by remember { mutableStateOf(Rect.Zero) }
 
             Box(
                 Modifier
+                    .fillMaxSize()
                     .align(Alignment.Center)
                     .clipToBounds()
                     .onGloballyPositioned {
-                        val rect = it.boundsInRoot()
-                        position = Rect(it.positionInRoot(), rect.size)
+                        position = it.boundsInRoot()
                     }
             ) {
                 PTQBookPageViewInner(
-                    position = position,
+                    bounds = position,
                     controller = controller,
                     callbacks = callbacks.value,
                     onNext = {

@@ -34,7 +34,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -42,11 +44,14 @@ import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
+import kotlin.random.Random
 
 private const val TAG = "PTQBookPageMainActivity"
 
-private val allList = listOf(R.drawable.xinhai1, R.drawable.xinhai2,
-    R.drawable.xinhai3, R.drawable.xinhai4, R.drawable.xinhai5, R.drawable.xinhai6, R.drawable.xinhai7, R.drawable.xinhai8, R.drawable.xinhai9, R.drawable.ptq)
+private val allList = listOf(
+    R.drawable.xinhai1, R.drawable.xinhai2,
+    R.drawable.xinhai3, R.drawable.xinhai4, R.drawable.xinhai5, R.drawable.xinhai6, R.drawable.xinhai7, R.drawable.xinhai8, R.drawable.xinhai9, R.drawable.ptq
+)
 
 private val pageColorList = listOf(Color(0xffbfefff), Color(0xffffffff), Color(0xffffa07a), Color(0xffff6eb4), Color(0xffc1ffc1))
 
@@ -142,50 +147,60 @@ fun PTQView() {
         )
     }
 
+    val screenH = LocalConfiguration.current.screenHeightDp.dp
+    val screenW = LocalConfiguration.current.screenWidthDp.dp
+
     val ctx = LocalContext.current
     var state by rememberPTQBookPageViewState(pageCount = 100, currentPage = 0)
     var config by rememberPTQBookPageViewConfig()
 
-    PTQBookPageView(modifier = Modifier.offset(50.dp).padding(50.dp).width(300.dp).height(800.dp), config = config, state = state, ptqBookPageViewScope = {
-        onUserWantToChange { currentPage, isNextOrPrevious, success ->
-            if (!success) {
-                Toast.makeText(ctx, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
-            } else {
-                state = state.copy(currentPage = if (isNextOrPrevious) currentPage + 1 else currentPage - 1)
+    var padding by remember { mutableStateOf(arrayOf(0f, 0f, 0f, 0f)) }
+    var diySize by remember { mutableStateOf(false) }
+
+    PTQBookPageView(
+        modifier = Modifier.padding(start = padding[0].dp, top = padding[1].dp, end = padding[2].dp, bottom = padding[3].dp),
+        config = config,
+        state = state,
+        ptqBookPageViewScope = {
+            onUserWantToChange { currentPage, isNextOrPrevious, success ->
+                if (!success) {
+                    Toast.makeText(ctx, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
+                } else {
+                    state = state.copy(currentPage = if (isNextOrPrevious) currentPage + 1 else currentPage - 1)
+                }
             }
+
+        tapBehavior { leftUp, rightDown, touchPoint ->
+            val middle = (rightDown - leftUp).x / 2
+            return@tapBehavior touchPoint.x > middle
         }
 
-//        tapBehavior { leftUp, rightDown, touchPoint ->
-//            val middle = (rightDown - leftUp).x / 2
-//            return@tapBehavior touchPoint.x > middle
-//        }
-//
-//        responseDragWhen { rightDown, startTouchPoint, currentTouchPoint ->
-//            return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
-//        }
-//
-//        dragBehavior { rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
-//            val isFingerAtRight = lastTouchPoint.x > rightDown.x / 2
-//
-//            var isNext: Boolean? = null
-//            if (isRightToLeftWhenStart && !isFingerAtRight) {
-//                isNext = true
-//            }
-//
-//            if (!isRightToLeftWhenStart && isFingerAtRight) {
-//                isNext = false
-//            }
-//
-//            return@dragBehavior Pair(!isFingerAtRight, isNext)
-//        }
+        responseDragWhen { rightDown, startTouchPoint, currentTouchPoint ->
+            return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
+        }
 
-        contents { index, refresh ->
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(config.pageColor)
-            ) {
-                when {
+        dragBehavior { rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
+            val isFingerAtRight = lastTouchPoint.x > rightDown.x / 2
+
+            var isNext: Boolean? = null
+            if (isRightToLeftWhenStart && !isFingerAtRight) {
+                isNext = true
+            }
+
+            if (!isRightToLeftWhenStart && isFingerAtRight) {
+                isNext = false
+            }
+
+            return@dragBehavior Pair(!isFingerAtRight, isNext)
+        }
+
+            contents { index, refresh ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(config.pageColor)
+                ) {
+                    when {
 //                                    index < all.size -> {
 //                                        Image(
 //                                            painter = painterResource(id = all[index]), contentDescription = "xinhai", modifier = Modifier
@@ -193,89 +208,105 @@ fun PTQView() {
 //                                                .align(Alignment.Center)
 //                                        )
 //                                    }
-                    index < /*all.size + */3 -> {
-                        when (index) {
-                            /*all.size + 1*/0 -> {
-                            LazyColumn {
-                                item {
-                                    Text(text + text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                        index < /*all.size + */3 -> {
+                            when (index) {
+                                /*all.size + 1*/0 -> {
+                                LazyColumn {
+                                    item {
+                                        Text(text + text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                    }
+                                }
+                            }
+                                /*all.size + 2*/1 -> {
+                                Column {
+                                    Text(text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                }
+                            }
+                                else -> {
+                                    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Image(painter = painterResource(id = R.drawable.xinhai2), contentDescription = "xinhai2")
+                                        Text(text = text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                    }
                                 }
                             }
                         }
-                            /*all.size + 2*/1 -> {
-                            Column {
-                                Text(text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
-                            }
-                        }
-                            else -> {
-                                Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Image(painter = painterResource(id = R.drawable.xinhai2), contentDescription = "xinhai2")
-                                    Text(text = text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
-                                }
-                            }
+                        else -> {
+                            Text(
+                                text = (index + 1).toString(),
+                                Modifier
+                                    .size(50.dp)
+                                    .align(Alignment.Center)
+                            )
                         }
                     }
-                    else -> {
-                        Text(
-                            text = (index + 1).toString(),
-                            Modifier
-                                .size(50.dp)
-                                .align(Alignment.Center)
-                        )
+
+                    LazyRow(
+                        modifier = Modifier
+                            .padding(bottom = 40.dp)
+                            .background(color = Color.Gray.copy(alpha = 0.5f))
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .align(Alignment.BottomCenter),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        item {
+                            Text(text = (index + 1).toString() + " / " + state.pageCount)
+                            Button(
+                                onClick = {
+                                    padding = if (!diySize) {
+                                        val Ox = Random.nextInt(0, (screenW * 0.2f).value.toInt()).toFloat()
+                                        val Oy = Random.nextInt(0, (screenH * 0.2f).value.toInt()).toFloat()
+                                        val Cx = Random.nextInt(0, (screenW * 0.2f).value.toInt()).toFloat()
+                                        val Cy = Random.nextInt(0, (screenH * 0.2f).value.toInt()).toFloat()
+                                        arrayOf(Ox, Oy, Cx, Cy)
+                                    } else {
+                                        arrayOf(0f, 0f, 0f, 0f)
+                                    }
+                                    Log.d(TAG, "PTQView: ${padding.joinToString(" ")} $screenH $screenW ")
+                                    diySize = !diySize
+                                }, modifier = Modifier.padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+                            ) {
+                                Text(if (!diySize) "换个尺寸" else "还原")
+                            }
+                            Button(
+                                onClick = { config = config.copy(pageColor = pageColorList.random()) }, modifier = Modifier
+                                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+                            ) {
+                                Text("换个底色")
+                            }
+                            Button(
+                                onClick = { state = state.copy(currentPage = (0 until state.pageCount).toMutableList().random()) }, modifier = Modifier
+                                    .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
+                            ) {
+                                Text("随机翻页")
+                            }
+                            Button(
+                                onClick = { config = config.copy(disabled = !config.disabled) }, modifier = Modifier
+                                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+                            ) {
+                                Text(if (!config.disabled) "禁用翻页" else "启用翻页")
+                            }
+                            Button(
+                                onClick = { state = state.copy(pageCount = index + (1..100).toMutableList().random()) }, modifier = Modifier
+                                    .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
+                            ) {
+                                Text("改变总页数")
+                            }
+                            Button(
+                                onClick = { if (index < all.size) all[index] = allList.random() }, modifier = Modifier
+                                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+                            ) {
+                                Text("换一张")
+                            }
+                        }
                     }
                 }
 
-                LazyRow(
-                    modifier = Modifier
-                        .padding(bottom = 40.dp)
-                        .background(color = Color.Gray.copy(alpha = 0.5f))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                        .align(Alignment.BottomCenter),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    item {
-                        Text(text = (index + 1).toString() + " / " + state.pageCount)
-                        Button(
-                            onClick = { if (index < all.size) all[index] = allList.random() }, modifier = Modifier
-                                .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
-                        ) {
-                            Text("换一张")
-                        }
-                        Button(
-                            onClick = { config = config.copy(pageColor = pageColorList.random()) }, modifier = Modifier
-                                .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
-                        ) {
-                            Text("换个底色")
-                        }
-                        Button(
-                            onClick = { state = state.copy(currentPage = (0 until state.pageCount).toMutableList().random()) }, modifier = Modifier
-                                .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
-                        ) {
-                            Text("随机翻页")
-                        }
-                        Button(
-                            onClick = { config = config.copy(disabled = !config.disabled) }, modifier = Modifier
-                                .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
-                        ) {
-                            Text(if (!config.disabled) "禁用翻页" else "启用翻页")
-                        }
-                        Button(
-                            onClick = { state = state.copy(pageCount = index + (1..100).toMutableList().random()) }, modifier = Modifier
-                                .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
-                        ) {
-                            Text("改变总页数")
-                        }
-                    }
-                }
+                refresh()
             }
 
-            refresh()
-        }
-
-    })
+        })
 }
-
 
 
 //@Composable

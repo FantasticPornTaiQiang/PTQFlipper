@@ -75,7 +75,7 @@ private enum class State {
 }
 
 /**
- * @param position 绝对位置
+ * @param bounds 组件宽高
  * @param callbacks 内容
  * @param controller 控制器
  * @param onNext 企图下一页时调用（当处于最后一页仍想翻下一页也会触发onNext）
@@ -84,7 +84,7 @@ private enum class State {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 internal fun PTQBookPageViewInner(
-    position: Rect,
+    bounds: Rect,
     controller: PTQBookPageBitmapController,
     callbacks: PTQBookPageViewScopeImpl,
     onNext: () -> Unit = {},
@@ -94,26 +94,11 @@ internal fun PTQBookPageViewInner(
     val localConfig = LocalPTQBookPageViewConfig.current
 
     //组件宽高和原点O
-    val screenHeight = /*localConfig.screenHeight*/ position.height
-    val screenWidth = /*localConfig.screenWidth*/ position.width
-    Log.d(TAG, "PTQBookPageViewInner: $screenHeight")
-
-    //用于尺寸转换，viewScreenWRatio, viewScreenHRatio, screenViewWRatio, screenViewHRatio, viewOffsetX, viewOffsetY
-    val sizeTransition by remember(position) {
-        mutableStateOf(
-            arrayOf(
-                position.width / screenWidth,
-                position.height / screenHeight,
-                screenWidth / position.width,
-                screenHeight / position.height,
-                position.topLeft.x,
-                position.topLeft.y
-            )
-        )
-    }
+    val screenHeight = bounds.height
+    val screenWidth = bounds.width
 
     //扭曲格点数
-    val bitmapMeshCount by remember(position) {
+    val bitmapMeshCount by remember(bounds) {
         mutableStateOf(
             Pair(
                 (screenWidth / distortionInterval).toInt(),
@@ -123,17 +108,17 @@ internal fun PTQBookPageViewInner(
     }
 
     //可拖动范围
-    val dragXRange by remember(position) { mutableStateOf(FloatRange(0f, screenWidth * (1 - maxDragXRatio))) }
+    val dragXRange by remember(bounds) { mutableStateOf(FloatRange(0f, screenWidth * (1 - maxDragXRatio))) }
 
     //组件左上角
     val absO by remember { mutableStateOf(Point(0f, 0f)) }
     //Tap回调中的组件左上角
-    val leftUpOnTap by remember(position) { mutableStateOf(Point(0f, tapYDeltaRatio * screenHeight)) }
+    val leftUpOnTap by remember(bounds) { mutableStateOf(Point(0f, tapYDeltaRatio * screenHeight)) }
     //组件右下角
-    val absC by remember(position) { mutableStateOf(Point(screenWidth, screenHeight)) }
+    val absC by remember(bounds) { mutableStateOf(Point(screenWidth, screenHeight)) }
 
     //位于组件一半高度的直线，用于处理翻转，绝对坐标系
-    val lBCPerpendicularBisector by remember(position) { mutableStateOf(Line(0f, screenHeight / 2)) }
+    val lBCPerpendicularBisector by remember(bounds) { mutableStateOf(Line(0f, screenHeight / 2)) }
 
     //拖动事件，包括原触点，增量，现触点
     var curDragEvent by remember { mutableStateOf(DragEvent(absO.copy(), absO.copy())) }
@@ -305,17 +290,16 @@ internal fun PTQBookPageViewInner(
         .fillMaxSize()
         .pointerInput(
             localConfig,
-            sizeTransition,
             dragXRange,
             leftUpOnTap,
             absC
         ) {
-            detectTapGestures { viewSystemOffset: Offset ->
+            detectTapGestures { touchOffset: Offset ->
                 if (state != State.Idle || !controller.isRenderOk() || localConfig.disabled) {
                     return@detectTapGestures
                 }
 
-                val touchPoint = viewSystemOffset.toScreenSystem(sizeTransition[2], sizeTransition[3])
+                val touchPoint = touchOffset.toPoint
 
                 if (!dragXRange.contains(touchPoint.x)) {
                     return@detectTapGestures
@@ -365,7 +349,6 @@ internal fun PTQBookPageViewInner(
         }
         .pointerInput(
             localConfig,
-            sizeTransition,
             dragXRange,
             leftUpOnTap,
             absC,
@@ -377,7 +360,7 @@ internal fun PTQBookPageViewInner(
                         return@detectDragGestures
                     }
 
-                    val touchPoint = viewSystemOffset.toScreenSystem(sizeTransition[2], sizeTransition[3])
+                    val touchPoint = viewSystemOffset.toPoint
 
                     if (!dragXRange.contains(touchPoint.x)) {
                         return@detectDragGestures
@@ -391,14 +374,12 @@ internal fun PTQBookPageViewInner(
                     animStartAndEndPoint = animStartAndEndPoint.copy(originTouchPoint = touchPoint)
                     time = System.currentTimeMillis()
                 },
-                onDrag = { _: PointerInputChange, viewSystemDragAmount: Offset ->
+                onDrag = { _: PointerInputChange, dragAmount: Offset ->
                     if (!controller.isRenderOk() || localConfig.disabled) {
                         return@detectDragGestures
                     }
 
-                    val dragAmount = viewSystemDragAmount.toScreenSystem(sizeTransition[2], sizeTransition[3])
-
-                    val cur = (curDragEvent.currentTouchPoint + dragAmount)
+                    val cur = (curDragEvent.currentTouchPoint + dragAmount.toPoint)
                     curDragEvent = DragEvent(curDragEvent.currentTouchPoint.copy(), cur)
 
                     if (state == State.Idle) {
@@ -562,16 +543,8 @@ internal fun PTQBookPageViewInner(
                 }
             }
 
-            //需要Size处理的有:distortedEdges, distortedVertices, meshCounts
-            val viewScreenWidthRatio = sizeTransition[0]
-            val viewScreenHeightRatio = sizeTransition[1]
-            val viewSizeDistortEdges = distortedEdges.map { edge ->
-                edge.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
-            }
-            val viewSizeDistortedVertices = distortedVertices.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
-
             val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = upsideDownAllPoints
-                .buildPath(viewSizeDistortEdges, upsideDown, viewScreenWidthRatio, viewScreenHeightRatio)
+                .buildPath(distortedEdges, upsideDown)
 
             Canvas(modifier = Modifier.fillMaxSize(), onDraw = {
                 drawIntoCanvas {
@@ -616,7 +589,7 @@ internal fun PTQBookPageViewInner(
                     frameworkPaint.shader = null
                     frameworkPaint.color = nativePageColor
                     it.drawPath(paths[0], paint)
-                    nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, viewSizeDistortedVertices, 0, null, 0, frameworkPaint)
+                    nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
 
                     //画阴影区域1
                     frameworkPaint.shader = LinearGradient(
@@ -703,7 +676,6 @@ private inline fun buildStateLoose(
     val lHF = Line.withTwoPoints(points.H, dragEventCartesian.originTouchPoint)
     val dragDirection = dragEventCartesian.directionToLineInCartesianSystem(lHF)
     val flipDragDirection = dragEventCartesian.directionToOInCartesianSystem()
-    val Ex = Line.withKAndOnePoint(-1 / Line.withTwoPoints(points.C, points.H).k, points.C..points.H).x(points.C.y)
     val kJH = Line.withTwoPoints(points.J, points.H).k
 
     if (dragDirection == DragDirection.Static || kJH.isNaN()) return null
@@ -1084,62 +1056,50 @@ private fun algorithmStateTight(absO: Point, absC: Point, theta: Float): Pair<Li
 }
 
 /**
- * 绝对系，根据点计算路径，注意View系和Screen系不要弄乱
- * @receiver Screen系
- * @param viewSizeDistortedEdges View系
+ * 绝对系，根据点计算路径
  * @return 第一项为页面路径，第二项为阴影路径，第三项为阴影控制点，第四项为shadow12的宽度。
  * 第二项中的五个子项分别代表区域1、区域2、区域3、区域4（圆弧）、光泽左侧、光泽右侧；
  * 第三项中的四个子项分别代表区域1、区域2、区域3、光泽左侧、光泽右侧；
  * 第四项是区域12阴影宽度。
  */
-private fun AllPoints.buildPath(viewSizeDistortedEdges: List<FloatArray>, isUpsideDown: Boolean, viewScreenWidthRatio: Float, viewScreenHeightRatio: Float): PathResult {
-    val (NVJ, ZTN, WSM, MUI) = viewSizeDistortedEdges
+private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown: Boolean): PathResult {
+    val (NVJ, ZTN, WSM, MUI) = distortedEdges
 
-    val viewSizeAllPoints = toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
-
-    //构建Path，View系
+    //构建Path
     val thisPage = Path().apply {
-        with(viewSizeAllPoints) {
-            moveTo(W)
-            connect(WSM)
-            lineTo(M)
-            lineTo(N)
-            connect(ZTN, !isUpsideDown)
-            lineTo(Z)
-            lineTo(B)
-            lineTo(O)
-            lineTo(A)
-            lineTo(W)
-        }
+        moveTo(W)
+        connect(WSM)
+        lineTo(M)
+        lineTo(N)
+        connect(ZTN, !isUpsideDown)
+        lineTo(Z)
+        lineTo(B)
+        lineTo(O)
+        lineTo(A)
+        lineTo(W)
     }
 
-    //构建Path，View系
     val thisPageBack = Path().apply {
-        with(viewSizeAllPoints) {
-            moveTo(M)
-            lineTo(N)
-            connect(NVJ, isUpsideDown)
-            lineTo(H)
-            connect(MUI, true)
-            lineTo(M)
-        }
+        moveTo(M)
+        lineTo(N)
+        connect(NVJ, isUpsideDown)
+        lineTo(H)
+        connect(MUI, true)
+        lineTo(M)
     }
 
-    //构建Path，View系
     val nextPage = Path().apply {
-        with(viewSizeAllPoints) {
-            moveTo(C)
-            lineTo(W)
-            connect(WSM)
-            lineTo(M)
-            lineTo(N)
-            connect(ZTN, !isUpsideDown)
-            lineTo(Z)
-            lineTo(C)
-        }
+        moveTo(C)
+        lineTo(W)
+        connect(WSM)
+        lineTo(M)
+        lineTo(N)
+        connect(ZTN, !isUpsideDown)
+        lineTo(Z)
+        lineTo(C)
     }
 
-    //计算阴影，Screen系
+    //计算阴影
     val lHF = Line.withTwoPoints(J, H)
     val lHE = Line.withTwoPoints(H, I)
     val WE = (S.x - W.x) * 2
@@ -1164,64 +1124,55 @@ private fun AllPoints.buildPath(viewSizeDistortedEdges: List<FloatArray>, isUpsi
     val S1 = if (!lST.k.isNaN()) Point(S.x + shadow3Width / ((1 - 1 / (1 + lST.k * lST.k)).pow(0.5f)), C.y) else Point(S.x + shadow3Width, C.y)
     val T1 = if (!lST.k.isNaN()) Point(C.x, Line.withKAndOnePoint(lST.k, S1).y(C.x)) else Point(S1.x, O.y)
 
-    //构建Path，View系
     val shadow1 = Path().apply {
-        with(viewSizeAllPoints) {
-            moveTo(H2.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            lineTo(J1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            quadraticBezierTo(V1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio), N)
-            quadraticBezierTo(V, J)
-            lineTo(H)
-            close()
-        }
+        moveTo(H2)
+        lineTo(J1)
+        quadraticBezierTo(V1, N)
+        quadraticBezierTo(V, J)
+        lineTo(H)
+        close()
     }
 
-    //圆弧，构建Path，View系
+    //圆弧
     val shadow4 = Path().apply {
-        with(viewSizeAllPoints) {
-            moveTo(H1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            //处理翻转
-            if (C.y == 0f) {
-                arcTo(Rect(H.toOffset, shadow12Width * viewScreenWidthRatio), lHF.theta().toDeg() + 180f, -90f, true)
-            } else {
-                arcTo(Rect(H.toOffset, shadow12Width * viewScreenWidthRatio), lHF.theta().toDeg(), 90f, true)
-            }
-            lineTo(H)
-            close()
+        moveTo(H1)
+        //处理翻转
+        if (C.y == 0f) {
+            arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg() + 180f, -90f, true)
+        } else {
+            arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg(), 90f, true)
         }
+        lineTo(H)
+        close()
     }
 
-    //构建Path，View系
     val shadow2 = Path().apply {
-        with(viewSizeAllPoints) {
-            moveTo(H)
-            lineTo(H1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            lineTo(I1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            quadraticBezierTo(U1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio), M)
-            quadraticBezierTo(U, I)
-            close()
-            op(this@apply, nextPage, PathOperation.Difference)
-        }
+        moveTo(H)
+        lineTo(H1)
+        lineTo(I1)
+        quadraticBezierTo(U1, M)
+        quadraticBezierTo(U, I)
+        close()
+        op(this@apply, nextPage, PathOperation.Difference)
     }
 
-    //构建Path，View系
     val shadow3 = Path().apply {
-        moveTo(viewSizeAllPoints.W)
-        lineTo(S1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        moveTo(W)
+        lineTo(S1)
 
         //若接近垂直，则直接画成方形，否则画梯形（计算使用Screen系，构建Path使用View系）
         if ((T1.y / C.y).absoluteValue > shadow3VerticalThreshold) {
-            lineTo(S1.copy(y = C.y.absoluteValue - S1.y).toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            lineTo(W.copy(y = C.y.absoluteValue - W.y).toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            lineTo(S1.copy(y = C.y.absoluteValue - S1.y))
+            lineTo(W.copy(y = C.y.absoluteValue - W.y))
         } else {
-            lineTo(T1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-            lineTo(viewSizeAllPoints.Z)
+            lineTo(T1)
+            lineTo(Z)
         }
 
         close()
     }
 
-    //光泽计算，Screen系
+    //光泽计算
     val lustreStartRange = FloatRange(0f, lustreStartMinDistance)
     val lustreEndRange = FloatRange(0f, lustreEndMinDistance)
     val lustreEndShadowWidthRange = FloatRange(0f, lustreEndShadowMinWidth)
@@ -1239,32 +1190,30 @@ private fun AllPoints.buildPath(viewSizeDistortedEdges: List<FloatArray>, isUpsi
     val lS3T3 = Line.withKAndOnePoint(lST.k, S3)
     val lS4T4 = Line.withKAndOnePoint(lST.k, S4)
 
-    //构建Path，View系
     val lustreEndShadow = Path().apply {
         if (lustreEndDistance + lustreEndShadowWidth > H.distanceTo(lST)) {
             moveTo(O)
             close()
             return@apply
         }
-        moveTo(S2.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-        lineTo(T2.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-        lineTo(T3.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-        lineTo(S3.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        moveTo(S2)
+        lineTo(T2)
+        lineTo(T3)
+        lineTo(S3)
         close()
         op(this, thisPageBack, operation = PathOperation.Intersect)
     }
 
-    //构建Path，View系
     val lustreStartShadow = Path().apply {
         if (lustreEndDistance + lustreEndShadowWidth > H.distanceTo(lST)) {
             moveTo(O)
             close()
             return@apply
         }
-        moveTo(viewSizeAllPoints.S)
-        lineTo(viewSizeAllPoints.T)
-        lineTo(T4.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
-        lineTo(S4.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        moveTo(S)
+        lineTo(T)
+        lineTo(T4)
+        lineTo(S4)
         close()
         op(this, thisPageBack, operation = PathOperation.Intersect)
     }
@@ -1274,34 +1223,32 @@ private fun AllPoints.buildPath(viewSizeDistortedEdges: List<FloatArray>, isUpsi
     val lS1T1 = Line.withKAndOnePoint(lST.k, S1)
     val lHC = Line.withTwoPoints(H, C)
 
-//    Log.d(TAG, "buildPath: ${lKL.intersectAt(lHC)} ${lS1T1.intersectAt(lHC)}")
-
     return PathResult(
         listOf(thisPage, thisPageBack, nextPage),
         listOf(shadow1, shadow2, shadow3, shadow4, lustreEndShadow, lustreStartShadow),
         listOf(
             Pair(
-                H.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
-                H2.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+                H.avoidNaN(),
+                H2.avoidNaN()
             ),
             Pair(
-                H.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
-                H1.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+                H.avoidNaN(),
+                H1.avoidNaN()
             ),
             Pair(
-                lKL.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
-                lS1T1.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+                lKL.intersectAt(lHC).avoidNaN(),
+                lS1T1.intersectAt(lHC).avoidNaN()
             ),
             Pair(
-                lS2T2.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
-                lS3T3.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+                lS2T2.intersectAt(lHC).avoidNaN(),
+                lS3T3.intersectAt(lHC).avoidNaN()
             ),
             Pair(
-                lST.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
-                lS4T4.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+                lST.intersectAt(lHC).avoidNaN(),
+                lS4T4.intersectAt(lHC).avoidNaN()
             )
         ),
-        shadow12Width * viewScreenWidthRatio
+        shadow12Width
     )
 }
 
@@ -1543,41 +1490,6 @@ private fun Point.isOn(line: Line) = line.k * x + line.b == y
 private val Offset.toPoint get() = Point(x, y)
 private val Point.toOffset get() = Offset(x, y)
 
-/**
- * 将手指触点从组件坐标系转换为屏幕系
- * @param screenViewHeightRatio 屏幕与组件的高度比
- * @param screenViewWidthRatio 屏幕与组件的宽度比
- * @receiver 手指触点已经是相对于组件的位置了，例如组件有50的padding，则点击绝对屏幕系的(50,50)时，[this]值为(0,0)
- */
-private fun Offset.toScreenSystem(screenViewWidthRatio: Float, screenViewHeightRatio: Float) = run {
-    Point(x * screenViewWidthRatio, y * screenViewHeightRatio)
-}
-
-private fun Point.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float) =
-    Point(x * viewScreenWidthRatio, y * viewScreenHeightRatio)
-
-private fun List<Float>.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float): FloatArray {
-    val newEdge = FloatArray(size)
-    for (i in indices step 2) {
-        newEdge[i] = this[i] * viewScreenWidthRatio
-    }
-    for (i in 1 until size step 2) {
-        newEdge[i] = this[i] * viewScreenHeightRatio
-    }
-    return newEdge
-}
-
-private fun FloatArray.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float): FloatArray {
-    val newEdge = FloatArray(size)
-    for (i in indices step 2) {
-        newEdge[i] = this[i] * viewScreenWidthRatio
-    }
-    for (i in 1 until size step 2) {
-        newEdge[i] = this[i] * viewScreenHeightRatio
-    }
-    return newEdge
-}
-
 private fun Path.moveTo(p: Point?) = p?.let { this.moveTo(p.x, p.y) }
 private fun Path.lineTo(p: Point?) = p?.let { this.lineTo(p.x, p.y) }
 private fun Path.quadraticBezierTo(controlPoint: Point?, endPoint: Point?) {
@@ -1586,7 +1498,7 @@ private fun Path.quadraticBezierTo(controlPoint: Point?, endPoint: Point?) {
     }
 }
 
-private fun Path.connect(points: FloatArray, reverse: Boolean = false) {
+private fun Path.connect(points: List<Float>, reverse: Boolean = false) {
     val size = points.size / 2
     (0 until size).forEach { i ->
         val xIndex = i + i
@@ -1792,21 +1704,3 @@ private data class AllPoints(
         )
     }
 }
-
-private fun AllPoints.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float) = AllPoints(
-    Point(O.x * viewScreenWidthRatio, O.y * viewScreenHeightRatio),
-    Point(A.x * viewScreenWidthRatio, A.y * viewScreenHeightRatio),
-    Point(B.x * viewScreenWidthRatio, B.y * viewScreenHeightRatio),
-    Point(C.x * viewScreenWidthRatio, C.y * viewScreenHeightRatio),
-    Point(H.x * viewScreenWidthRatio, H.y * viewScreenHeightRatio),
-    Point(I.x * viewScreenWidthRatio, I.y * viewScreenHeightRatio),
-    Point(J.x * viewScreenWidthRatio, J.y * viewScreenHeightRatio),
-    Point(M.x * viewScreenWidthRatio, M.y * viewScreenHeightRatio),
-    Point(N.x * viewScreenWidthRatio, N.y * viewScreenHeightRatio),
-    Point(S.x * viewScreenWidthRatio, S.y * viewScreenHeightRatio),
-    Point(T.x * viewScreenWidthRatio, T.y * viewScreenHeightRatio),
-    Point(U.x * viewScreenWidthRatio, U.y * viewScreenHeightRatio),
-    Point(V.x * viewScreenWidthRatio, V.y * viewScreenHeightRatio),
-    Point(W.x * viewScreenWidthRatio, W.y * viewScreenHeightRatio),
-    Point(Z.x * viewScreenWidthRatio, Z.y * viewScreenHeightRatio),
-)

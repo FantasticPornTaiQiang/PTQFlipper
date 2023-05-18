@@ -1,17 +1,10 @@
 package ptq.mpga.pinance.widget
 
 import androidx.annotation.IntRange
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import kotlin.reflect.KProperty
 
-/**
- * @param pageCount 总页数
- * @param currentPage 当前页数，如果为null则页数由翻页器内部控制
- */
 data class PTQBookPageViewState(@IntRange(from = 1L) val pageCount: Int, @IntRange(from = 0L) val currentPage: Int? = null) {
     init {
         require(pageCount > 0) {
@@ -27,7 +20,7 @@ data class PTQBookPageViewState(@IntRange(from = 1L) val pageCount: Int, @IntRan
 }
 
 /**
- * @param pageCount 总页数
+ * @param pageCount 总页数，如果页面总数小于当前页数，则会引发异常
  * @param currentPage 当前页数，如果为null则页数由翻页器内部控制
  */
 @Composable
@@ -43,3 +36,10 @@ fun rememberPTQBookPageViewState(pageCount: Int = 1, currentPage: Int? = null) =
 fun rememberPTQBookPageViewConfig(pageColor: Color = Color.White, disabled: Boolean = false) = remember {
     mutableStateOf(PTQBookPageViewConfig(pageColor, disabled))
 }
+
+data class PTQBookPageViewConfig(
+    val pageColor: Color = Color.White,
+    val disabled: Boolean = false,
+)
+
+val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
