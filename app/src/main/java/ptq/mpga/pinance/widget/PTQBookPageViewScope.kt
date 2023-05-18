@@ -28,9 +28,10 @@ interface PTQBookPageViewScope {
      * （1）点击x>1/2处时翻下一页
      *
      * （2）点击x<1/2处时翻上一页
-     * @param leftUp 组件左上角坐标
-     * @param rightDown 组件右下角坐标
-     * @param touchPoint 用户手指触摸坐标
+     *
+     * @param leftUP 组件左上角坐标（相对组件的坐标）
+     * @param rightDown 组件右下角坐标（相对组件的坐标）
+     * @param touchPoint 用户手指触摸坐标（相对组件的坐标）
      * @return 翻页行为，true=下一页，false=上一页，null=不响应
      */
     fun tapBehavior(block: (leftUp: Point, rightDown: Point, touchPoint: Point) -> Boolean?)
@@ -42,14 +43,13 @@ interface PTQBookPageViewScope {
      *
      * 从右往左滑则右起手（翻下一页），从左往右划则左起手（翻上一页）
      *
-     * @param leftUp 组件左上角坐标
-     * @param rightDown 组件右下角坐标
-     * @param startTouchPoint 用户起手坐标（开始动画前）
-     * @param currentTouchPoint 当前触摸点坐标
+     * @param rightDown 组件右下角坐标（相对组件的坐标）（左上角为0）
+     * @param startTouchPoint 用户起手坐标（开始动画前）（相对组件的坐标）
+     * @param currentTouchPoint 当前触摸点坐标（相对组件的坐标）
      * @return 翻页行为，true=下一页（从右侧翻开），false=上一页（从左侧翻开），null=不响应
      *
      */
-    fun responseDragWhen(block: (leftUp: Point, rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)
+    fun responseDragWhen(block: (rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)
 
     /**
      * 自定义拖动松手时的翻页行为（会影响页面呈现和[onUserWantToChange]回调）
@@ -63,12 +63,11 @@ interface PTQBookPageViewScope {
      * （3）起手从左向右，松手在x>1/2处则翻上一页
      *
      * （4）起手从左向右，松手在x<1/2处则不翻页
-     * @param leftUp 组件左上角坐标
-     * @param rightDown 组件右下角坐标
-     * @param initialTouchPoint 用户初始触摸坐标（开始动画前）
-     * @param lastTouchPoint 用户松手坐标（结束动画前）
+     * @param rightDown 组件右下角坐标（相对组件的坐标）（左上角为0）
+     * @param initialTouchPoint 用户初始触摸坐标（开始动画前）（相对组件的坐标）
+     * @param lastTouchPoint 用户松手坐标（结束动画前）（相对组件的坐标）
      * @param isRightToLeftWhenStart 用户起手是从右向左还是从左向右（即responseDragWhen的结果）
      * @return 翻页行为：第一个参数控制UI动画，true=从左侧退出，false=从右侧退出，第二个参数控制翻页响应，true=下一页，false=上一页，null=不翻页
      */
-    fun dragBehavior(block: (leftUp: Point, rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>)
+    fun dragBehavior(block: (rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>)
 }

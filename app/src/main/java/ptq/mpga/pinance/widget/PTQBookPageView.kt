@@ -10,9 +10,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -21,7 +27,9 @@ private const val TAG = "PTQBookPageView"
 
 data class PTQBookPageViewConfig(
     val pageColor: Color = Color.White,
-    val disabled: Boolean = false
+    val disabled: Boolean = false,
+//    internal var screenHeight: Float = 0f,
+//    internal var screenWidth: Float = 0f,
 )
 
 val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
@@ -30,8 +38,8 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
     var contents: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
     var onPageWantToChange: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
     var tapBehavior: ((leftUp: Point, rightDown: Point, touchPoint: Point) -> Boolean?)? = null
-    var dragBehavior: ((leftUp: Point, rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>)? = null
-    var responseDragWhen: ((leftUp: Point, rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)? = null
+    var dragBehavior: ((rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>)? = null
+    var responseDragWhen: ((rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)? = null
 
     override fun onUserWantToChange(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit) {
         onPageWantToChange = block
@@ -45,11 +53,11 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
         tapBehavior = block
     }
 
-    override fun responseDragWhen(block: (leftUp: Point, rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?) {
+    override fun responseDragWhen(block: (rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?) {
         responseDragWhen = block
     }
 
-    override fun dragBehavior(block: (leftUp: Point, rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>) {
+    override fun dragBehavior(block: (rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>) {
         dragBehavior = block
     }
 }
@@ -65,10 +73,13 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
 fun PTQBookPageView(
     modifier: Modifier = Modifier, config: PTQBookPageViewConfig = PTQBookPageViewConfig(), state: PTQBookPageViewState, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit
 ) {
+//    val screenH = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+//    val screenW = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+
     Box(
         modifier.fillMaxSize()
     ) {
-        var size by remember { mutableStateOf(IntSize.Zero) }
+//        var size by remember { mutableStateOf(IntSize.Zero) }
 
         val controller by remember {
             mutableStateOf(PTQBookPageBitmapController(state.pageCount))
@@ -101,10 +112,10 @@ fun PTQBookPageView(
                         Box(
                             Modifier
                                 .wrapContentSize()
-                                .onSizeChanged {
-                                    Log.d(TAG, "Content: aaaaa")
-                                    size = it
-                                }
+//                                .onSizeChanged {
+//                                    Log.d(TAG, "Content: aaaaa")
+//                                    size = it
+//                                }
                         ) {
                             callbacks.value.contents(this, controller.getNeedPage()) { controller.refresh() }
                             recomposeTrigger
@@ -128,16 +139,24 @@ fun PTQBookPageView(
 
         //貌似必须包裹在CompositionLocalProvider，否则就会不断重组，没想通为什么
         CompositionLocalProvider(
-            LocalPTQBookPageViewConfig provides config
+            LocalPTQBookPageViewConfig provides (config.apply {
+//                screenHeight = screenH
+//                screenWidth = screenW
+            })
         ) {
+            var position by remember { mutableStateOf(Rect.Zero) }
+
             Box(
                 Modifier
-                    .width(size.width.dp)
-                    .height(size.height.dp)
                     .align(Alignment.Center)
                     .clipToBounds()
+                    .onGloballyPositioned {
+                        val rect = it.boundsInRoot()
+                        position = Rect(it.positionInRoot(), rect.size)
+                    }
             ) {
                 PTQBookPageViewInner(
+                    position = position,
                     controller = controller,
                     callbacks = callbacks.value,
                     onNext = {

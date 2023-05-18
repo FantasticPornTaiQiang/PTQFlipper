@@ -25,9 +25,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import ptq.mpga.pinance.widget.Line.Companion.k
 import ptq.mpga.pinance.widget.Line.Companion.theta
 import kotlin.math.*
@@ -78,6 +75,7 @@ private enum class State {
 }
 
 /**
+ * @param position 绝对位置
  * @param callbacks 内容
  * @param controller 控制器
  * @param onNext 企图下一页时调用（当处于最后一页仍想翻下一页也会触发onNext）
@@ -86,6 +84,7 @@ private enum class State {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 internal fun PTQBookPageViewInner(
+    position: Rect,
     controller: PTQBookPageBitmapController,
     callbacks: PTQBookPageViewScopeImpl,
     onNext: () -> Unit = {},
@@ -94,28 +93,47 @@ internal fun PTQBookPageViewInner(
     //配置
     val localConfig = LocalPTQBookPageViewConfig.current
 
-    //手势监听的lambda中需要
-//    val config by remember {
-//        val block = {
-//            return@mutableStateOf localConfig
-//        }
-//        mutableStateOf()
-//    }
-
     //组件宽高和原点O
-    val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
-    val screenWidth = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val dragXRange by remember { mutableStateOf(FloatRange(0f, screenWidth * (1 - maxDragXRatio))) }
+    val screenHeight = /*localConfig.screenHeight*/ position.height
+    val screenWidth = /*localConfig.screenWidth*/ position.width
+    Log.d(TAG, "PTQBookPageViewInner: $screenHeight")
+
+    //用于尺寸转换，viewScreenWRatio, viewScreenHRatio, screenViewWRatio, screenViewHRatio, viewOffsetX, viewOffsetY
+    val sizeTransition by remember(position) {
+        mutableStateOf(
+            arrayOf(
+                position.width / screenWidth,
+                position.height / screenHeight,
+                screenWidth / position.width,
+                screenHeight / position.height,
+                position.topLeft.x,
+                position.topLeft.y
+            )
+        )
+    }
+
+    //扭曲格点数
+    val bitmapMeshCount by remember(position) {
+        mutableStateOf(
+            Pair(
+                (screenWidth / distortionInterval).toInt(),
+                (screenHeight / distortionInterval).toInt()
+            )
+        )
+    }
+
+    //可拖动范围
+    val dragXRange by remember(position) { mutableStateOf(FloatRange(0f, screenWidth * (1 - maxDragXRatio))) }
 
     //组件左上角
     val absO by remember { mutableStateOf(Point(0f, 0f)) }
     //Tap回调中的组件左上角
-    val leftUpOnTap by remember(screenHeight, absO) { mutableStateOf(Point(absO.x, tapYDeltaRatio * screenHeight)) }
+    val leftUpOnTap by remember(position) { mutableStateOf(Point(0f, tapYDeltaRatio * screenHeight)) }
     //组件右下角
-    val absC by remember(absO, screenHeight, screenWidth) { mutableStateOf(absO + Point(screenWidth, screenHeight)) }
+    val absC by remember(position) { mutableStateOf(Point(screenWidth, screenHeight)) }
 
     //位于组件一半高度的直线，用于处理翻转，绝对坐标系
-    val lBCPerpendicularBisector by remember { mutableStateOf(Line(0f, screenHeight / 2)) }
+    val lBCPerpendicularBisector by remember(position) { mutableStateOf(Line(0f, screenHeight / 2)) }
 
     //拖动事件，包括原触点，增量，现触点
     var curDragEvent by remember { mutableStateOf(DragEvent(absO.copy(), absO.copy())) }
@@ -194,7 +212,7 @@ internal fun PTQBookPageViewInner(
 
             animStartAndEndPoint = DragEvent(startPoint.copy(), if (isFingerAtRight) Point(dragXRange.end, y) else Point(-dragXRange.end / 2, y))
         } else {
-            val (isLeftLeave, isNext) = dragBehavior(absO, absC, dragInitialPoint, curDragEvent.currentTouchPoint, isRightToLeftWhenStart)
+            val (isLeftLeave, isNext) = dragBehavior(absC, dragInitialPoint, curDragEvent.currentTouchPoint, isRightToLeftWhenStart)
 
             isNext?.let {
                 isNextOrPrevious = it
@@ -269,7 +287,7 @@ internal fun PTQBookPageViewInner(
                     }
 
                 } else {
-                    val (_, isNext) = dragBehavior(absO, absC, dragInitialPoint, curDragEvent.currentTouchPoint, isRightToLeftWhenStart)
+                    val (_, isNext) = dragBehavior(absC, dragInitialPoint, curDragEvent.currentTouchPoint, isRightToLeftWhenStart)
 
                     isNext?.let {
                         isNextOrPrevious = it
@@ -285,13 +303,24 @@ internal fun PTQBookPageViewInner(
 
     Box(modifier = Modifier
         .fillMaxSize()
-        .pointerInput(localConfig) {
-            detectTapGestures { offset: Offset ->
-                if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || localConfig.disabled) {
+        .pointerInput(
+            localConfig,
+            sizeTransition,
+            dragXRange,
+            leftUpOnTap,
+            absC
+        ) {
+            detectTapGestures { viewSystemOffset: Offset ->
+                if (state != State.Idle || !controller.isRenderOk() || localConfig.disabled) {
                     return@detectTapGestures
                 }
 
-                val touchPoint = offset.toPoint
+                val touchPoint = viewSystemOffset.toScreenSystem(sizeTransition[2], sizeTransition[3])
+
+                if (!dragXRange.contains(touchPoint.x)) {
+                    return@detectTapGestures
+                }
+
                 val tapYDelta = leftUpOnTap.y
 
                 //最顶上预留tapYDelta的距离
@@ -334,15 +363,27 @@ internal fun PTQBookPageViewInner(
                 }
             }
         }
-        .pointerInput(localConfig) {
+        .pointerInput(
+            localConfig,
+            sizeTransition,
+            dragXRange,
+            leftUpOnTap,
+            absC,
+            interruptedInDrag
+        ) {
             detectDragGestures(
-                onDragStart = { offset: Offset ->
-                    if (state != State.Idle || !dragXRange.contains(offset.x) || !controller.isRenderOk() || localConfig.disabled) {
+                onDragStart = { viewSystemOffset: Offset ->
+                    if (state != State.Idle || !controller.isRenderOk() || localConfig.disabled) {
                         return@detectDragGestures
                     }
 
-                    val touchPoint = offset.toPoint
-                    dragInitialPoint = offset.toPoint
+                    val touchPoint = viewSystemOffset.toScreenSystem(sizeTransition[2], sizeTransition[3])
+
+                    if (!dragXRange.contains(touchPoint.x)) {
+                        return@detectDragGestures
+                    }
+
+                    dragInitialPoint = touchPoint
                     pageState = PageState.Loose
                     interruptedInDrag = false
                     curDragEvent = DragEvent(touchPoint, touchPoint)
@@ -350,24 +391,21 @@ internal fun PTQBookPageViewInner(
                     animStartAndEndPoint = animStartAndEndPoint.copy(originTouchPoint = touchPoint)
                     time = System.currentTimeMillis()
                 },
-                onDrag = { _: PointerInputChange, dragAmount: Offset ->
+                onDrag = { _: PointerInputChange, viewSystemDragAmount: Offset ->
                     if (!controller.isRenderOk() || localConfig.disabled) {
                         return@detectDragGestures
                     }
 
-                    val cur = (curDragEvent.currentTouchPoint + dragAmount.toPoint)
-                    curDragEvent = DragEvent(curDragEvent.currentTouchPoint.copy(), cur)
+                    val dragAmount = viewSystemDragAmount.toScreenSystem(sizeTransition[2], sizeTransition[3])
 
-                    if (!dragXRange.contains(cur.x)) {
-                        onDragEnd.value()
-                        return@detectDragGestures
-                    }
+                    val cur = (curDragEvent.currentTouchPoint + dragAmount)
+                    curDragEvent = DragEvent(curDragEvent.currentTouchPoint.copy(), cur)
 
                     if (state == State.Idle) {
                         if (System.currentTimeMillis() - time > animStartTimeout) {
                             if (animStartAndEndPoint
-                                    .directionToOInCoordinateSystem()
-                                    .isIn(DragDirection.up, DragDirection.down, DragDirection.static)
+                                    .directionToOInCartesianSystem()
+                                    .isIn(DragDirection.Up, DragDirection.Down, DragDirection.Static)
                             ) {
                                 return@detectDragGestures
                             }
@@ -380,7 +418,7 @@ internal fun PTQBookPageViewInner(
                             val isRightToLeft = if (responseDragWhen == null) {
                                 animStartAndEndPoint.currentTouchPoint.x < animStartAndEndPoint.originTouchPoint.x
                             } else {
-                                responseDragWhen(absO.copy(), absC.copy(), animStartAndEndPoint.originTouchPoint.copy(), cur.copy())
+                                responseDragWhen(absC.copy(), animStartAndEndPoint.originTouchPoint.copy(), cur.copy())
                             }
 
                             if (isRightToLeft == null) {
@@ -404,7 +442,6 @@ internal fun PTQBookPageViewInner(
                             if (isUpToDown) {
                                 upsideDown = true
                                 f = screenHeight - f
-                                Log.d(TAG, "PTQPageFlipper:  upsdiedown1 $upsideDown")
                             }
                             animLastPoint = animStartAndEndPoint.originTouchPoint.copy()
                             state = State.EnterAnimStart
@@ -412,10 +449,16 @@ internal fun PTQBookPageViewInner(
                     }
 
                     if (state == State.Draggable) {
+                        if (!dragXRange.contains(cur.x)) {
+                            interruptedInDrag = true
+                            onDragEnd.value()
+                            return@detectDragGestures
+                        }
+
                         val dragEvent = if (upsideDown) curDragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else curDragEvent
 
                         if (pageState == PageState.Tight) {
-                            val newTheta = onDragWhenTightState(absO.copy(), f, theta, dragEvent, screenHeight, screenWidth)
+                            val newTheta = onDragWhenTightState(f, theta, dragEvent, screenHeight, screenWidth)
                             theta = newTheta
                         }
                     }
@@ -456,36 +499,35 @@ internal fun PTQBookPageViewInner(
 
                 when (pageState) {
                     PageState.Loose -> {
-                        buildStateLoose(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f, upsideDown, state) { newState, newTheta, newEmaxInThetaMin, newUpsideDown ->
+                        buildStateLoose(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f, upsideDown, state) { newState, newTheta, newUpsideDown ->
                             newUpsideDown?.let {
-                                Log.d(TAG, "PTQPageFlipper:  upsdiedown2 $it")
                                 upsideDown = it
                                 f = screenHeight - f
                                 return@buildStateLoose
                             }
                             newState?.let { pageState = it }
                             newTheta?.let { theta = it }
-                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
+//                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
                         }
                     }
                     PageState.WMin -> {
                         buildStateWMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
                             theta = newTheta
                             pageState = newState
-                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
+//                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
                         }
                     }
                     PageState.ThetaMin -> {
                         buildStateThetaMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
                             theta = newTheta
                             pageState = newState
-                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
+//                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
                         }
                     }
                     PageState.Tight -> {
                         buildStateTight(absO.copy(), Point(screenWidth, screenHeight), theta, dragEvent, f) { newState ->
                             pageState = newState
-                            Log.d(TAG, "PTQPageFlipper: state $newState start")
+//                            Log.d(TAG, "PTQPageFlipper: state $newState start")
                         }
                     }
                 }
@@ -501,8 +543,10 @@ internal fun PTQBookPageViewInner(
 
             var upsideDownAllPoints = if (upsideDown) nonNullAllPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else nonNullAllPoints
 
-            var (distortedEdges, distortedVertices, meshCounts) = upsideDownAllPoints.toCoordinateSystem(absO).buildDistortionPoints(distortBitmap, absO, upsideDown)
+            var (distortedEdges, distortedVertices) = upsideDownAllPoints
+                .toCartesianSystem().buildDistortionPoints(screenWidth, screenHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
 
+            //这里的逻辑可以再优化
             //如果newAllPoint为空，或者页面完全垂直，则舍弃本轮，使用上一轮的点重新计算
             if (distortedEdges[0].isNotEmpty()) {
                 if (newAllPoints != null) {
@@ -512,14 +556,22 @@ internal fun PTQBookPageViewInner(
                 if (newAllPoints != null) {
                     //newAllPoints不为null意味着使用的是本轮的点计算的，因此重算一次，如果为null则已经用的是allPoints算的了，不需要重算
                     upsideDownAllPoints = if (upsideDown) allPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else allPoints
-                    val lastAll = upsideDownAllPoints.toCoordinateSystem(absO).buildDistortionPoints(distortBitmap, absO, upsideDown)
+                    val lastAll = upsideDownAllPoints.toCartesianSystem().buildDistortionPoints(screenWidth, screenHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
                     distortedEdges = lastAll.first
                     distortedVertices = lastAll.second
-                    meshCounts = lastAll.third
                 }
             }
 
-            val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = upsideDownAllPoints.buildPath(distortedEdges, upsideDown)
+            //需要Size处理的有:distortedEdges, distortedVertices, meshCounts
+            val viewScreenWidthRatio = sizeTransition[0]
+            val viewScreenHeightRatio = sizeTransition[1]
+            val viewSizeDistortEdges = distortedEdges.map { edge ->
+                edge.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+            }
+            val viewSizeDistortedVertices = distortedVertices.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+
+            val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = upsideDownAllPoints
+                .buildPath(viewSizeDistortEdges, upsideDown, viewScreenWidthRatio, viewScreenHeightRatio)
 
             Canvas(modifier = Modifier.fillMaxSize(), onDraw = {
                 drawIntoCanvas {
@@ -553,11 +605,18 @@ internal fun PTQBookPageViewInner(
                     it.drawPath(shadowPaths[2], paint)
                     it.clipPath(paths[2], ClipOp.Difference)
 
+//                    it.drawLine(shaderControlPointPairs[2].first.toOffset, shaderControlPointPairs[2].second.toOffset, paint.apply {
+//                        style = PaintingStyle.Stroke
+//                        strokeWidth = 3f
+//                        color = Color.Red
+//                        shader = null
+//                    })
+
                     //画当前页
                     frameworkPaint.shader = null
                     frameworkPaint.color = nativePageColor
                     it.drawPath(paths[0], paint)
-                    nativeCanvas.drawBitmapMesh(distortBitmap, meshCounts[0], meshCounts[1], distortedVertices, 0, null, 0, frameworkPaint)
+                    nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, viewSizeDistortedVertices, 0, null, 0, frameworkPaint)
 
                     //画阴影区域1
                     frameworkPaint.shader = LinearGradient(
@@ -624,6 +683,11 @@ internal fun PTQBookPageViewInner(
     }
 }
 
+/**
+ * Loose状态下，计算所有点
+ * @param dragEvent 绝对系
+ * @return 绝对系下的所有点，如果有state的变化或翻转，则打断，返回null
+ */
 private inline fun buildStateLoose(
     absO: Point,
     dragEvent: DragEvent,
@@ -631,46 +695,45 @@ private inline fun buildStateLoose(
     f: Float,
     upsideDown: Boolean,
     state: State,
-    changeState: (newPageState: PageState?, theta: Float?, EmaxInThetaMin: Float?, upsideDown: Boolean?) -> Unit
+    changeState: (newPageState: PageState?, theta: Float?, upsideDown: Boolean?) -> Unit
 ): AllPoints? {
     val (theta, points) = algorithmStateLoose(absO, dragEvent.originTouchPoint, absC, f)
 
-    val dragEventCoordinate = dragEvent.inCoordinateSystem(absO)
-    val lHF = Line.withTwoPoints(points.H, dragEventCoordinate.originTouchPoint)
-    val dragDirection = dragEventCoordinate.directionToLineInCoordinateSystem(lHF)
-    val flipDragDirection = dragEventCoordinate.directionToOInCoordinateSystem()
+    val dragEventCartesian = dragEvent.toCartesianSystem()
+    val lHF = Line.withTwoPoints(points.H, dragEventCartesian.originTouchPoint)
+    val dragDirection = dragEventCartesian.directionToLineInCartesianSystem(lHF)
+    val flipDragDirection = dragEventCartesian.directionToOInCartesianSystem()
     val Ex = Line.withKAndOnePoint(-1 / Line.withTwoPoints(points.C, points.H).k, points.C..points.H).x(points.C.y)
     val kJH = Line.withTwoPoints(points.J, points.H).k
 
-    if (dragDirection == DragDirection.static || kJH.isNaN()) return null
+    if (dragDirection == DragDirection.Static || kJH.isNaN()) return null
 
     if (state == State.EnterAnimStart || state == State.Draggable) {
         when {
             //翻转
-            kJH <= 0 && flipDragDirection.isIn(DragDirection.down, DragDirection.rightDown, DragDirection.leftDown, DragDirection.left, DragDirection.right) -> {
-                changeState(null, null, null, !upsideDown)
+            kJH <= 0 && flipDragDirection.isIn(DragDirection.Down, DragDirection.RightDown, DragDirection.LeftDown, DragDirection.Left, DragDirection.Right) -> {
+                changeState(null, null, !upsideDown)
                 return null
             }
-            points.W.x < minWxRatio * points.C.x && dragDirection.isIn(DragDirection.up, DragDirection.rightUp, DragDirection.leftUp, DragDirection.leftDown) -> {
-                changeState(PageState.WMin, theta, null, null)
+            points.W.x < minWxRatio * points.C.x && dragDirection.isIn(DragDirection.Up, DragDirection.RightUp, DragDirection.LeftUp, DragDirection.LeftDown) -> {
+                changeState(PageState.WMin, theta, null)
                 return null
             }
-            theta < minTheta && dragDirection.isIn(DragDirection.up, DragDirection.rightUp, DragDirection.right, DragDirection.rightDown) -> {
-                changeState(PageState.ThetaMin, minTheta, Ex, null)
+            theta < minTheta && dragDirection.isIn(DragDirection.Up, DragDirection.RightUp, DragDirection.Right, DragDirection.RightDown) -> {
+                changeState(PageState.ThetaMin, minTheta, null)
                 return null
             }
         }
     }
 
-    return points.toAbsSystem(absO)
+    return points.toAbsoluteSystem()
 }
 
 private fun algorithmStateLoose(absO: Point, absR: Point, absC: Point, f: Float): Pair<Float, AllPoints> {
-    val O = absO.inCoordinateSystem(absO)
-    val C = absC.inCoordinateSystem(absO)
-    val A = Point(O.x, C.y)
-    val B = Point(C.x, O.y)
-    val R = absR.inCoordinateSystem(absO)
+    val C = absC.toCartesianSystem()
+    val A = Point(absO.x, C.y)
+    val B = Point(C.x, absO.y)
+    val R = absR.toCartesianSystem()
 
     val Rf = Point(C.x, C.y + f)
     val k = (C.x - R.x) / (R.y - Rf.y)
@@ -702,45 +765,44 @@ private fun algorithmStateLoose(absO: Point, absR: Point, absC: Point, f: Float)
     val M = U..S
     val N = T..V
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(absO, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
 
     return Pair(lCH.theta(), allPoints)
 }
 
 private inline fun buildStateWMin(absO: Point, dragEvent: DragEvent, absC: Point, f: Float, changeState: (newPageState: PageState, theta: Float) -> Unit): AllPoints? {
     val (theta, WE, points) = algorithmStateWMin(absO, dragEvent.originTouchPoint, absC, f)
-    val R = dragEvent.currentTouchPoint.inCoordinateSystem(absO)
+    val R = dragEvent.currentTouchPoint.toCartesianSystem()
     val looseWx = Line.withKAndOnePoint((points.C.x - R.x) / (R.y - Point(points.C.x, points.C.y + f).y), R).x(points.C.y)
     val minWE = stateTightMinWERatio * points.C.x
 
-    val dragEventCoordinate = dragEvent.inCoordinateSystem(absO)
-    val lHF = Line.withTwoPoints(points.H, dragEventCoordinate.originTouchPoint)
-    val dragDirection = dragEventCoordinate.directionToLineInCoordinateSystem(lHF)
+    val dragEventCartesian = dragEvent.toCartesianSystem()
+    val lHF = Line.withTwoPoints(points.H, dragEventCartesian.originTouchPoint)
+    val dragDirection = dragEventCartesian.directionToLineInCartesianSystem(lHF)
 
     when {
-        WE < minWE && dragDirection.isIn(DragDirection.up, DragDirection.rightUp, DragDirection.right, DragDirection.leftUp) -> {
+        WE < minWE && dragDirection.isIn(DragDirection.Up, DragDirection.RightUp, DragDirection.Right, DragDirection.LeftUp) -> {
             changeState(PageState.Tight, maxOf(minTheta, theta))
             return null
         }
-        (looseWx >= minWxRatio * points.C.x) && dragDirection.isIn(DragDirection.leftDown, DragDirection.down, DragDirection.rightDown, DragDirection.left) -> {
+        (looseWx >= minWxRatio * points.C.x) && dragDirection.isIn(DragDirection.LeftDown, DragDirection.Down, DragDirection.RightDown, DragDirection.Left) -> {
             changeState(PageState.Loose, maxOf(minTheta, theta))
             return null
         }
-        theta < minTheta && dragDirection.isIn(DragDirection.right, DragDirection.up, DragDirection.rightUp, DragDirection.rightDown) -> {
+        theta < minTheta && dragDirection.isIn(DragDirection.Right, DragDirection.Up, DragDirection.RightUp, DragDirection.RightDown) -> {
             changeState(PageState.ThetaMin, minTheta)
             return null
         }
     }
 
-    return points.toAbsSystem(absO)
+    return points.toAbsoluteSystem()
 }
 
 private fun algorithmStateWMin(absO: Point, absTouchPoint: Point, absC: Point, f: Float): Triple<Float, Float, AllPoints> {
-    val O = absO.inCoordinateSystem(absO)
-    val C = absC.inCoordinateSystem(absO)
-    val A = Point(O.x, C.y)
-    val B = Point(C.x, O.y)
-    val R = absTouchPoint.inCoordinateSystem(absO)
+    val C = absC.toCartesianSystem()
+    val A = Point(absO.x, C.y)
+    val B = Point(C.x, absO.y)
+    val R = absTouchPoint.toCartesianSystem()
     val W = Point(minWxRatio * C.x, C.y)
 
     val Rf = Point(C.x, C.y + f)
@@ -772,7 +834,7 @@ private fun algorithmStateWMin(absO: Point, absTouchPoint: Point, absC: Point, f
     val M = U..S
     val N = T..V
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(absO, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
 
     return Triple(lCH.theta(), E.x - W.x, allPoints)
 }
@@ -783,40 +845,39 @@ private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: P
 
     val (WE, points) = algorithmStateThetaMin(absO, dragEvent.originTouchPoint, absC, f)
 
-    val dragEventCoordinate = dragEvent.inCoordinateSystem(absO)
-    val lHF = Line.withTwoPoints(points.H, dragEventCoordinate.originTouchPoint)
-    val dragDirection = dragEventCoordinate.directionToLineInCoordinateSystem(lHF)
+    val dragEventCartesian = dragEvent.toCartesianSystem()
+    val lHF = Line.withTwoPoints(points.H, dragEventCartesian.originTouchPoint)
+    val dragDirection = dragEventCartesian.directionToLineInCartesianSystem(lHF)
 
     when {
-        points.W.x <= minWx && WE <= minWE && dragDirection.isIn(DragDirection.rightUp, DragDirection.leftUp, DragDirection.up, DragDirection.right) -> {
+        points.W.x <= minWx && WE <= minWE && dragDirection.isIn(DragDirection.RightUp, DragDirection.LeftUp, DragDirection.Up, DragDirection.Right) -> {
             changeState(PageState.Tight, minTheta)
             return null
         }
-        points.H.distanceTo(dragEventCoordinate.originTouchPoint) < f && points.W.x > minWx && dragDirection.isIn(
-            DragDirection.left,
-            DragDirection.leftDown,
-            DragDirection.rightDown,
-            DragDirection.down,
-            DragDirection.leftUp
+        points.H.distanceTo(dragEventCartesian.originTouchPoint) < f && points.W.x > minWx && dragDirection.isIn(
+            DragDirection.Left,
+            DragDirection.LeftDown,
+            DragDirection.RightDown,
+            DragDirection.Down,
+            DragDirection.LeftUp
         ) -> {
             changeState(PageState.Loose, minTheta)
             return null
         }
-        points.H.distanceTo(dragEventCoordinate.originTouchPoint) < f && points.W.x <= minWx && dragDirection.isIn(DragDirection.leftDown, DragDirection.left, DragDirection.leftUp) -> {
+        points.H.distanceTo(dragEventCartesian.originTouchPoint) < f && points.W.x <= minWx && dragDirection.isIn(DragDirection.LeftDown, DragDirection.Left, DragDirection.LeftUp) -> {
             changeState(PageState.WMin, minTheta)
             return null
         }
     }
 
-    return points.toAbsSystem(absO)
+    return points.toAbsoluteSystem()
 }
 
 private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Point, f: Float): Pair<Float, AllPoints> {
-    val O = absO.inCoordinateSystem(absO)
-    val C = absC.inCoordinateSystem(absO)
-    val A = Point(O.x, C.y)
-    val B = Point(C.x, O.y)
-    val R = absTouchPoint.inCoordinateSystem(absO)
+    val C = absC.toCartesianSystem()
+    val A = Point(absO.x, C.y)
+    val B = Point(C.x, absO.y)
+    val R = absTouchPoint.toCartesianSystem()
 
     val minWx = minWxRatio * C.x
     val minWE = stateTightMinWERatio * C.x
@@ -863,30 +924,30 @@ private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Poin
     val M = U..S
     val N = T..V
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(absO, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
 
     return Pair(E.x - W.x, allPoints)
 }
 
-private fun onDragWhenTightState(absO: Point, f: Float, currentTheta: Float, absDragEvent: DragEvent, screenHeight: Float, screenWidth: Float): Float {
-    val dragEvent = absDragEvent.inCoordinateSystem(absO)
+private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: DragEvent, screenHeight: Float, screenWidth: Float): Float {
+    val dragEvent = absDragEvent.toCartesianSystem()
 
-    return when (dragEvent.directionToOInCoordinateSystem()) {
-        DragDirection.right -> {
+    return when (dragEvent.directionToOInCartesianSystem()) {
+        DragDirection.Right -> {
             val delta = getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
             currentTheta + delta
         }
-        DragDirection.up -> {
+        DragDirection.Up -> {
             val delta = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
             currentTheta + delta
         }
         //左下、下、左、左上、右下
-        DragDirection.leftDown, DragDirection.down, DragDirection.left, DragDirection.leftUp, DragDirection.rightDown -> {
-            val (_, delta) = getTightStateDeltaWhenBack(absO, f, currentTheta, absDragEvent, screenWidth, screenHeight)
+        DragDirection.LeftDown, DragDirection.Down, DragDirection.Left, DragDirection.LeftUp, DragDirection.RightDown -> {
+            val (_, delta) = getTightStateDeltaWhenBack(f, currentTheta, absDragEvent, screenWidth, screenHeight)
             currentTheta + delta
         }
         //右上
-        DragDirection.rightUp -> {
+        DragDirection.RightUp -> {
             val deltaRight = getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
             val deltaUp = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
             val yToX = -absDragEvent.dragDelta.y / absDragEvent.dragDelta.x
@@ -909,8 +970,8 @@ private fun getTightStateDeltaWhenRight(currentTheta: Float, currentFingerX: Flo
     return newTheta - currentTheta
 }
 
-private fun getTightStateDeltaWhenBack(absO: Point, f: Float, currentTheta: Float, dragEvent: DragEvent, screenWidth: Float, screenHeight: Float): Pair<Point, Float> {
-    val C = Point(screenWidth, screenHeight).inCoordinateSystem(absO)
+private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent: DragEvent, screenWidth: Float, screenHeight: Float): Pair<Point, Float> {
+    val C = Point(screenWidth, screenHeight).toCartesianSystem()
     val W = Point(minWxRatio * screenWidth, C.y)
     val E = Point(W.x + stateTightMinWERatio * C.x, C.y)
     val Rc = if (dragEvent.dragDelta.x == 0f) {
@@ -926,7 +987,7 @@ private fun getTightStateDeltaWhenBack(absO: Point, f: Float, currentTheta: Floa
         }
         Point(q, Ry)
     } else {
-        val touchLine = Line.withKAndOnePoint(-dragEvent.dragDelta.y / dragEvent.dragDelta.x, dragEvent.currentTouchPoint.inCoordinateSystem(absO))
+        val touchLine = Line.withKAndOnePoint(-dragEvent.dragDelta.y / dragEvent.dragDelta.x, dragEvent.currentTouchPoint.toCartesianSystem())
         val m = touchLine.k
         val n = touchLine.b
 
@@ -951,10 +1012,10 @@ private fun getTightStateDeltaWhenBack(absO: Point, f: Float, currentTheta: Floa
 
     val thetaRange = FloatRange(minOf(currentTheta, finalTheta), finalTheta)
 
-    val originTouchPoint = dragEvent.originTouchPoint.inCoordinateSystem(absO)
+    val originTouchPoint = dragEvent.originTouchPoint.toCartesianSystem()
     val fingerRange = FloatRange(0f, originTouchPoint.distanceTo(Rc))
 
-    val newFingerValue = dragEvent.currentTouchPoint.inCoordinateSystem(absO).distanceTo(originTouchPoint)
+    val newFingerValue = dragEvent.currentTouchPoint.toCartesianSystem().distanceTo(originTouchPoint)
     val newTheta = fingerRange.linearMappingWithConstraints(newFingerValue, thetaRange).run { thetaRange.constraints(this) }
 
     return Pair(Rc, newTheta - currentTheta)
@@ -963,13 +1024,13 @@ private fun getTightStateDeltaWhenBack(absO: Point, f: Float, currentTheta: Floa
 private fun buildStateTight(absO: Point, absC: Point, theta: Float, dragEvent: DragEvent, f: Float, changeState: (newPageState: PageState) -> Unit): AllPoints? {
     val (lHF, allPoints) = algorithmStateTight(absO, absC, theta)
 
-    val dragEventCoordinate = dragEvent.inCoordinateSystem(absO)
-    val dragDirection = dragEventCoordinate.directionToLineInCoordinateSystem(lHF)
+    val dragEventCartesian = dragEvent.toCartesianSystem()
+    val dragDirection = dragEventCartesian.directionToLineInCartesianSystem(lHF)
 
-    val Rc = dragEvent.currentTouchPoint.inCoordinateSystem(absO)
+    val Rc = dragEvent.currentTouchPoint.toCartesianSystem()
 
-    if (Rc.isBelow(lHF) && dragDirection.isIn(DragDirection.rightDown, DragDirection.down, DragDirection.leftDown)) {
-        return if (Rc.distanceTo(allPoints.H) >= f && dragDirection.isIn(DragDirection.rightDown, DragDirection.down, DragDirection.leftDown)) {
+    if (Rc.isBelow(lHF) && dragDirection.isIn(DragDirection.RightDown, DragDirection.Down, DragDirection.LeftDown)) {
+        return if (Rc.distanceTo(allPoints.H) >= f && dragDirection.isIn(DragDirection.RightDown, DragDirection.Down, DragDirection.LeftDown)) {
             changeState(PageState.ThetaMin)
             null
         } else {
@@ -978,14 +1039,13 @@ private fun buildStateTight(absO: Point, absC: Point, theta: Float, dragEvent: D
         }
     }
 
-    return allPoints.toAbsSystem(absO)
+    return allPoints.toAbsoluteSystem()
 }
 
 private fun algorithmStateTight(absO: Point, absC: Point, theta: Float): Pair<Line, AllPoints> {
-    val O = absO.inCoordinateSystem(absO)
-    val C = absC.inCoordinateSystem(absO)
-    val B = Point(C.x, O.y)
-    val A = Point(O.x, C.y)
+    val C = absC.toCartesianSystem()
+    val B = Point(C.x, absO.y)
+    val A = Point(absO.x, C.y)
 
     val kCH = k(theta)
     val kEF = -1 / kCH
@@ -1018,60 +1078,72 @@ private fun algorithmStateTight(absO: Point, absC: Point, theta: Float): Pair<Li
     val M = U..S
     val N = V..T
 
-    val allPoints = AllPoints(O, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
+    val allPoints = AllPoints(absO, A, B, C, H, I, J, M, N, S, T, U, V, W, Z)
 
     return Pair(lFH, allPoints)
 }
 
 /**
- * 绝对系，根据点计算路径
+ * 绝对系，根据点计算路径，注意View系和Screen系不要弄乱
+ * @receiver Screen系
+ * @param viewSizeDistortedEdges View系
  * @return 第一项为页面路径，第二项为阴影路径，第三项为阴影控制点，第四项为shadow12的宽度。
  * 第二项中的五个子项分别代表区域1、区域2、区域3、区域4（圆弧）、光泽左侧、光泽右侧；
  * 第三项中的四个子项分别代表区域1、区域2、区域3、光泽左侧、光泽右侧；
  * 第四项是区域12阴影宽度。
  */
-private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown: Boolean): PathResult {
-    val (NVJ, ZTN, WSM, MUI) = distortedEdges
+private fun AllPoints.buildPath(viewSizeDistortedEdges: List<FloatArray>, isUpsideDown: Boolean, viewScreenWidthRatio: Float, viewScreenHeightRatio: Float): PathResult {
+    val (NVJ, ZTN, WSM, MUI) = viewSizeDistortedEdges
 
-    //页面
+    val viewSizeAllPoints = toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+
+    //构建Path，View系
     val thisPage = Path().apply {
-        moveTo(W)
-        connect(WSM)
-        lineTo(M)
-        lineTo(N)
-        connect(ZTN, !isUpsideDown)
-        lineTo(Z)
-        lineTo(B)
-        lineTo(O)
-        lineTo(A)
-        lineTo(W)
+        with(viewSizeAllPoints) {
+            moveTo(W)
+            connect(WSM)
+            lineTo(M)
+            lineTo(N)
+            connect(ZTN, !isUpsideDown)
+            lineTo(Z)
+            lineTo(B)
+            lineTo(O)
+            lineTo(A)
+            lineTo(W)
+        }
     }
 
+    //构建Path，View系
     val thisPageBack = Path().apply {
-        moveTo(M)
-        lineTo(N)
-        connect(NVJ, isUpsideDown)
-        lineTo(H)
-        connect(MUI, true)
-        lineTo(M)
+        with(viewSizeAllPoints) {
+            moveTo(M)
+            lineTo(N)
+            connect(NVJ, isUpsideDown)
+            lineTo(H)
+            connect(MUI, true)
+            lineTo(M)
+        }
     }
 
+    //构建Path，View系
     val nextPage = Path().apply {
-        moveTo(C)
-        lineTo(W)
-        connect(WSM)
-        lineTo(M)
-        lineTo(N)
-        connect(ZTN, !isUpsideDown)
-        lineTo(Z)
-        lineTo(C)
+        with(viewSizeAllPoints) {
+            moveTo(C)
+            lineTo(W)
+            connect(WSM)
+            lineTo(M)
+            lineTo(N)
+            connect(ZTN, !isUpsideDown)
+            lineTo(Z)
+            lineTo(C)
+        }
     }
 
-    //阴影
+    //计算阴影，Screen系
     val lHF = Line.withTwoPoints(J, H)
     val lHE = Line.withTwoPoints(H, I)
     val WE = (S.x - W.x) * 2
-    val WERange = FloatRange(0f, stateTightMinWERatio * (C.x - O.x))
+    val WERange = FloatRange(0f, stateTightMinWERatio * C.x)
     val shadow12Range = FloatRange(0f, shadowThreshold)
     val shadow12Width = WERange.linearMapping(WE, shadow12Range)
     val shadow3Width = shadow12Width * shadowPart3to1Ratio
@@ -1092,53 +1164,64 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val S1 = if (!lST.k.isNaN()) Point(S.x + shadow3Width / ((1 - 1 / (1 + lST.k * lST.k)).pow(0.5f)), C.y) else Point(S.x + shadow3Width, C.y)
     val T1 = if (!lST.k.isNaN()) Point(C.x, Line.withKAndOnePoint(lST.k, S1).y(C.x)) else Point(S1.x, O.y)
 
+    //构建Path，View系
     val shadow1 = Path().apply {
-        moveTo(H2)
-        lineTo(J1)
-        quadraticBezierTo(V1, N)
-        quadraticBezierTo(V, J)
-        lineTo(H)
-        close()
+        with(viewSizeAllPoints) {
+            moveTo(H2.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            lineTo(J1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            quadraticBezierTo(V1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio), N)
+            quadraticBezierTo(V, J)
+            lineTo(H)
+            close()
+        }
     }
 
-    //圆弧
+    //圆弧，构建Path，View系
     val shadow4 = Path().apply {
-        moveTo(H1)
-        //处理翻转
-        if (C.y == 0f) {
-            arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg() + 180f, -90f, true)
-        } else {
-            arcTo(Rect(H.toOffset, shadow12Width), lHF.theta().toDeg(), 90f, true)
+        with(viewSizeAllPoints) {
+            moveTo(H1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            //处理翻转
+            if (C.y == 0f) {
+                arcTo(Rect(H.toOffset, shadow12Width * viewScreenWidthRatio), lHF.theta().toDeg() + 180f, -90f, true)
+            } else {
+                arcTo(Rect(H.toOffset, shadow12Width * viewScreenWidthRatio), lHF.theta().toDeg(), 90f, true)
+            }
+            lineTo(H)
+            close()
         }
-        lineTo(H)
-        close()
     }
 
+    //构建Path，View系
     val shadow2 = Path().apply {
-        moveTo(H)
-        lineTo(H1)
-        lineTo(I1)
-        quadraticBezierTo(U1, M)
-        quadraticBezierTo(U, I)
-        close()
-        op(this, nextPage, PathOperation.Difference)
-    }
-
-    val shadow3 = Path().apply {
-        moveTo(W)
-        lineTo(S1)
-        //若接近垂直，则直接画成方形，否则画梯形
-        if (((T1.y - O.y) / (C.y - O.y)).absoluteValue > shadow3VerticalThreshold) {
-            lineTo(S1.copy(y = (C.y - O.y).absoluteValue - S1.y))
-            lineTo(W.copy(y = (C.y - O.y).absoluteValue - W.y))
-        } else {
-            lineTo(T1)
-            lineTo(Z)
+        with(viewSizeAllPoints) {
+            moveTo(H)
+            lineTo(H1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            lineTo(I1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            quadraticBezierTo(U1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio), M)
+            quadraticBezierTo(U, I)
+            close()
+            op(this@apply, nextPage, PathOperation.Difference)
         }
+    }
+
+    //构建Path，View系
+    val shadow3 = Path().apply {
+        moveTo(viewSizeAllPoints.W)
+        lineTo(S1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+
+        //若接近垂直，则直接画成方形，否则画梯形（计算使用Screen系，构建Path使用View系）
+        if ((T1.y / C.y).absoluteValue > shadow3VerticalThreshold) {
+            lineTo(S1.copy(y = C.y.absoluteValue - S1.y).toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            lineTo(W.copy(y = C.y.absoluteValue - W.y).toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        } else {
+            lineTo(T1.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+            lineTo(viewSizeAllPoints.Z)
+        }
+
         close()
     }
 
-    //光泽
+    //光泽计算，Screen系
     val lustreStartRange = FloatRange(0f, lustreStartMinDistance)
     val lustreEndRange = FloatRange(0f, lustreEndMinDistance)
     val lustreEndShadowWidthRange = FloatRange(0f, lustreEndShadowMinWidth)
@@ -1156,30 +1239,32 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val lS3T3 = Line.withKAndOnePoint(lST.k, S3)
     val lS4T4 = Line.withKAndOnePoint(lST.k, S4)
 
+    //构建Path，View系
     val lustreEndShadow = Path().apply {
         if (lustreEndDistance + lustreEndShadowWidth > H.distanceTo(lST)) {
             moveTo(O)
             close()
             return@apply
         }
-        moveTo(S2)
-        lineTo(T2)
-        lineTo(T3)
-        lineTo(S3)
+        moveTo(S2.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        lineTo(T2.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        lineTo(T3.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        lineTo(S3.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
         close()
         op(this, thisPageBack, operation = PathOperation.Intersect)
     }
 
+    //构建Path，View系
     val lustreStartShadow = Path().apply {
         if (lustreEndDistance + lustreEndShadowWidth > H.distanceTo(lST)) {
             moveTo(O)
             close()
             return@apply
         }
-        moveTo(S)
-        lineTo(T)
-        lineTo(T4)
-        lineTo(S4)
+        moveTo(viewSizeAllPoints.S)
+        lineTo(viewSizeAllPoints.T)
+        lineTo(T4.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
+        lineTo(S4.toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio))
         close()
         op(this, thisPageBack, operation = PathOperation.Intersect)
     }
@@ -1189,17 +1274,34 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val lS1T1 = Line.withKAndOnePoint(lST.k, S1)
     val lHC = Line.withTwoPoints(H, C)
 
+//    Log.d(TAG, "buildPath: ${lKL.intersectAt(lHC)} ${lS1T1.intersectAt(lHC)}")
+
     return PathResult(
         listOf(thisPage, thisPageBack, nextPage),
         listOf(shadow1, shadow2, shadow3, shadow4, lustreEndShadow, lustreStartShadow),
         listOf(
-            Pair(H.avoidNaN(), H2.avoidNaN()),
-            Pair(H.avoidNaN(), H1.avoidNaN()),
-            Pair(lKL.intersectAt(lHC).avoidNaN(), lS1T1.intersectAt(lHC).avoidNaN()),
-            Pair(lS2T2.intersectAt(lHC).avoidNaN(), lS3T3.intersectAt(lHC).avoidNaN()),
-            Pair(lST.intersectAt(lHC).avoidNaN(), lS4T4.intersectAt(lHC).avoidNaN())
+            Pair(
+                H.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
+                H2.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+            ),
+            Pair(
+                H.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
+                H1.avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+            ),
+            Pair(
+                lKL.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
+                lS1T1.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+            ),
+            Pair(
+                lS2T2.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
+                lS3T3.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+            ),
+            Pair(
+                lST.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio),
+                lS4T4.intersectAt(lHC).avoidNaN().toViewSystem(viewScreenWidthRatio, viewScreenHeightRatio)
+            )
         ),
-        shadow12Width
+        shadow12Width * viewScreenWidthRatio
     )
 }
 
@@ -1207,14 +1309,15 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
  * 获取Bitmap扭曲后的格点，相对坐标系
  * @return 第一个数组表示扭曲后边界格点[NVJ, ZTN, WSM, MUI]，第二个数组表示扭曲后格点，第三个数组表示扭曲格子数[宽，高]
  */
-private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsideDown: Boolean): Triple<Array<List<Float>>, FloatArray, Array<Int>> {
-    val meshWidthCount = bitmap.width / distortionInterval
-    val meshHeightCount = bitmap.height / distortionInterval
+private fun AllPoints.buildDistortionPoints(
+    width: Float,
+    height: Float,
+    meshWidthCount: Int,
+    meshHeightCount: Int,
+    isUpsideDown: Boolean): Pair<Array<List<Float>>, FloatArray> {
     val size = (meshWidthCount + 1) * (meshHeightCount + 1) * 2
     val vertices = FloatArray(size)
     val originalVertices = FloatArray(size)
-    val height = bitmap.height.toFloat()
-    val width = bitmap.width.toFloat()
 
     val kCH = Line.withTwoPoints(C, H).k
     val lWZ = Line.withKAndOnePoint(-1 / kCH, W)
@@ -1227,8 +1330,8 @@ private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsid
     val E = Point(lIH.x(C.y), C.y)
     val delta = N.distanceTo(lWZ) * PI.toFloat() / J.distanceTo(Jr)
     val r = N.distanceTo(lWZ)
-    val absC = absO.absScreenSystemWith(C)
-    val absH = absO.absScreenSystemWith(H)
+    val absC = C.toAbsoluteSystem()
+    val absH = H.toAbsoluteSystem()
 
     var index = 0
     (0..meshHeightCount).forEach { i ->
@@ -1263,7 +1366,7 @@ private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsid
         val y = vertices[yIndex]
 
         val absG = Point(x, y)
-        val G = Point(x, y).inCoordinateSystem(absO)
+        val G = Point(x, y).toCartesianSystem()
 
         if (!isUpsideDown) {
             if (!G.isBelow(lWZ)) return@forEach
@@ -1313,7 +1416,7 @@ private fun AllPoints.buildDistortionPoints(bitmap: Bitmap, absO: Point, isUpsid
         vertices[yIndex] = absQ.y
     }
 
-    return Triple(arrayOf(NVJPoints, ZTNPoints, WSMPoints, MUIPoints), vertices, arrayOf(meshWidthCount, meshHeightCount))
+    return Pair(arrayOf(NVJPoints, ZTNPoints, WSMPoints, MUIPoints), vertices)
 }
 
 /**
@@ -1331,30 +1434,30 @@ private data class PathResult(val pagePaths: List<Path>, val shadowPaths: List<P
 private data class DragEvent(val originTouchPoint: Point, val currentTouchPoint: Point) {
     val dragDelta get() = currentTouchPoint - originTouchPoint
 
-    fun inCoordinateSystem(absO: Point): DragEvent {
-        val newOrigin = originTouchPoint.inCoordinateSystem(absO)
-        val newCur = currentTouchPoint.inCoordinateSystem(absO)
+    fun toCartesianSystem(): DragEvent {
+        val newOrigin = originTouchPoint.toCartesianSystem()
+        val newCur = currentTouchPoint.toCartesianSystem()
         return DragEvent(newOrigin, newCur)
     }
 
     val isUnmoved get() = currentTouchPoint.x == originTouchPoint.x && currentTouchPoint.y == originTouchPoint.y
 
-    fun directionToLineInCoordinateSystem(line: Line): DragDirection = when {
-        line.k == 0f -> directionToOInCoordinateSystem()
+    fun directionToLineInCartesianSystem(line: Line): DragDirection = when {
+        line.k == 0f -> directionToOInCartesianSystem()
         line.k > 0f -> {
             val lParallel = Line.withKAndOnePoint(line.k, originTouchPoint)
             val lVertical = Line.withKAndOnePoint(-1 / line.k, originTouchPoint)
             currentTouchPoint.run {
                 when {
-                    isOn(lParallel) && isAbove(lVertical) -> DragDirection.right
-                    isAbove(lParallel) && isAbove(lVertical) -> DragDirection.rightUp
-                    isAbove(lParallel) && isOn(lVertical) -> DragDirection.up
-                    isAbove(lParallel) && isBelow(lVertical) -> DragDirection.leftUp
-                    isOn(lParallel) && isBelow(lVertical) -> DragDirection.left
-                    isBelow(lParallel) && isBelow(lVertical) -> DragDirection.leftDown
-                    isBelow(lParallel) && isOn(lVertical) -> DragDirection.down
-                    isBelow(lParallel) && isAbove(lVertical) -> DragDirection.rightDown
-                    else -> DragDirection.static
+                    isOn(lParallel) && isAbove(lVertical) -> DragDirection.Right
+                    isAbove(lParallel) && isAbove(lVertical) -> DragDirection.RightUp
+                    isAbove(lParallel) && isOn(lVertical) -> DragDirection.Up
+                    isAbove(lParallel) && isBelow(lVertical) -> DragDirection.LeftUp
+                    isOn(lParallel) && isBelow(lVertical) -> DragDirection.Left
+                    isBelow(lParallel) && isBelow(lVertical) -> DragDirection.LeftDown
+                    isBelow(lParallel) && isOn(lVertical) -> DragDirection.Down
+                    isBelow(lParallel) && isAbove(lVertical) -> DragDirection.RightDown
+                    else -> DragDirection.Static
                 }
             }
         }
@@ -1363,40 +1466,40 @@ private data class DragEvent(val originTouchPoint: Point, val currentTouchPoint:
             val lVertical = Line.withKAndOnePoint(-1 / line.k, originTouchPoint)
             currentTouchPoint.run {
                 when {
-                    isOn(lParallel) && isBelow(lVertical) -> DragDirection.right
-                    isAbove(lParallel) && isBelow(lVertical) -> DragDirection.rightUp
-                    isAbove(lParallel) && isOn(lVertical) -> DragDirection.up
-                    isAbove(lParallel) && isAbove(lVertical) -> DragDirection.leftUp
-                    isOn(lParallel) && isAbove(lVertical) -> DragDirection.left
-                    isBelow(lParallel) && isAbove(lVertical) -> DragDirection.leftDown
-                    isBelow(lParallel) && isOn(lVertical) -> DragDirection.down
-                    isBelow(lParallel) && isBelow(lVertical) -> DragDirection.rightDown
-                    else -> DragDirection.static
+                    isOn(lParallel) && isBelow(lVertical) -> DragDirection.Right
+                    isAbove(lParallel) && isBelow(lVertical) -> DragDirection.RightUp
+                    isAbove(lParallel) && isOn(lVertical) -> DragDirection.Up
+                    isAbove(lParallel) && isAbove(lVertical) -> DragDirection.LeftUp
+                    isOn(lParallel) && isAbove(lVertical) -> DragDirection.Left
+                    isBelow(lParallel) && isAbove(lVertical) -> DragDirection.LeftDown
+                    isBelow(lParallel) && isOn(lVertical) -> DragDirection.Down
+                    isBelow(lParallel) && isBelow(lVertical) -> DragDirection.RightDown
+                    else -> DragDirection.Static
                 }
             }
         }
-        else -> DragDirection.static
+        else -> DragDirection.Static
     }
 
-    fun directionToOInCoordinateSystem(): DragDirection {
+    fun directionToOInCartesianSystem(): DragDirection {
         return dragDelta.run {
             when {
-                x > 0f && y == 0f -> DragDirection.right
-                x > 0f && y > 0f -> DragDirection.rightUp
-                x == 0f && y > 0f -> DragDirection.up
-                x < 0f && y > 0f -> DragDirection.leftUp
-                x < 0f && y == 0f -> DragDirection.left
-                x < 0f && y < 0f -> DragDirection.leftDown
-                x == 0f && y < 0f -> DragDirection.down
-                x > 0f && y < 0f -> DragDirection.rightDown
-                else -> DragDirection.static
+                x > 0f && y == 0f -> DragDirection.Right
+                x > 0f && y > 0f -> DragDirection.RightUp
+                x == 0f && y > 0f -> DragDirection.Up
+                x < 0f && y > 0f -> DragDirection.LeftUp
+                x < 0f && y == 0f -> DragDirection.Left
+                x < 0f && y < 0f -> DragDirection.LeftDown
+                x == 0f && y < 0f -> DragDirection.Down
+                x > 0f && y < 0f -> DragDirection.RightDown
+                else -> DragDirection.Static
             }
         }
     }
 }
 
 private enum class DragDirection {
-    right, rightUp, up, leftUp, left, leftDown, down, rightDown, static
+    Right, RightUp, Up, LeftUp, Left, LeftDown, Down, RightDown, Static
 }
 
 private fun DragDirection.isIn(vararg directions: DragDirection) = directions.contains(this)
@@ -1410,20 +1513,11 @@ data class Point(var x: Float, var y: Float) {
 
     operator fun rangeTo(a: Point) = Point(0.5f * (x + a.x), 0.5f * (y + a.y))
 
-    /**
-     * 将相对系坐标转换为绝对系坐标 注意：此this为绝对原点
-     * @param absX 要转换的点
-     * @param this 绝对原点
-     * @return 绝对系坐标
-     */
-    internal fun absScreenSystemWith(absX: Point) = Point(absX.x + x, -absX.y + y)
-
-    /**
-     * 将绝对系坐标转换为相对系坐标，y与系统y坐标相反，且原点为相对原点
-     * @param absO 绝对原点
-     * @return 相对系坐标
-     */
-    internal fun inCoordinateSystem(absO: Point) = (this - absO).reverseY
+    //这两个函数一样，但是还是分成两个函数写，在调用时语义更明确
+    //相对系坐标转换为相对系坐标，y坐标相反
+    internal fun toAbsoluteSystem() = Point(x, -y)
+    //绝对系坐标转换为相对系坐标，y坐标相反
+    internal fun toCartesianSystem() = Point(x, -y)
 
     internal fun getKWith(a: Point) = (y - a.y) / (x - a.x)
 }
@@ -1446,13 +1540,43 @@ private fun Point.isAbove(line: Line) = line.k * x + line.b < y
 
 private fun Point.isOn(line: Line) = line.k * x + line.b == y
 
-private inline val Point.reverseY
-    get() = this.apply {
-        y = -y
-    }
-
 private val Offset.toPoint get() = Point(x, y)
 private val Point.toOffset get() = Offset(x, y)
+
+/**
+ * 将手指触点从组件坐标系转换为屏幕系
+ * @param screenViewHeightRatio 屏幕与组件的高度比
+ * @param screenViewWidthRatio 屏幕与组件的宽度比
+ * @receiver 手指触点已经是相对于组件的位置了，例如组件有50的padding，则点击绝对屏幕系的(50,50)时，[this]值为(0,0)
+ */
+private fun Offset.toScreenSystem(screenViewWidthRatio: Float, screenViewHeightRatio: Float) = run {
+    Point(x * screenViewWidthRatio, y * screenViewHeightRatio)
+}
+
+private fun Point.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float) =
+    Point(x * viewScreenWidthRatio, y * viewScreenHeightRatio)
+
+private fun List<Float>.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float): FloatArray {
+    val newEdge = FloatArray(size)
+    for (i in indices step 2) {
+        newEdge[i] = this[i] * viewScreenWidthRatio
+    }
+    for (i in 1 until size step 2) {
+        newEdge[i] = this[i] * viewScreenHeightRatio
+    }
+    return newEdge
+}
+
+private fun FloatArray.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float): FloatArray {
+    val newEdge = FloatArray(size)
+    for (i in indices step 2) {
+        newEdge[i] = this[i] * viewScreenWidthRatio
+    }
+    for (i in 1 until size step 2) {
+        newEdge[i] = this[i] * viewScreenHeightRatio
+    }
+    return newEdge
+}
 
 private fun Path.moveTo(p: Point?) = p?.let { this.moveTo(p.x, p.y) }
 private fun Path.lineTo(p: Point?) = p?.let { this.lineTo(p.x, p.y) }
@@ -1462,7 +1586,7 @@ private fun Path.quadraticBezierTo(controlPoint: Point?, endPoint: Point?) {
     }
 }
 
-private fun Path.connect(points: List<Float>, reverse: Boolean = false) {
+private fun Path.connect(points: FloatArray, reverse: Boolean = false) {
     val size = points.size / 2
     (0 until size).forEach { i ->
         val xIndex = i + i
@@ -1592,25 +1716,23 @@ private data class AllPoints(
     val W: Point,
     val Z: Point
 ) {
-    fun toAbsSystem(absO: Point) = with(absO) {
-        AllPoints(
-            absScreenSystemWith(O),
-            absScreenSystemWith(A),
-            absScreenSystemWith(B),
-            absScreenSystemWith(C),
-            absScreenSystemWith(H),
-            absScreenSystemWith(I),
-            absScreenSystemWith(J),
-            absScreenSystemWith(M),
-            absScreenSystemWith(N),
-            absScreenSystemWith(S),
-            absScreenSystemWith(T),
-            absScreenSystemWith(U),
-            absScreenSystemWith(V),
-            absScreenSystemWith(W),
-            absScreenSystemWith(Z)
-        )
-    }
+    fun toAbsoluteSystem() = AllPoints(
+        O.toAbsoluteSystem(),
+        A.toAbsoluteSystem(),
+        B.toAbsoluteSystem(),
+        C.toAbsoluteSystem(),
+        H.toAbsoluteSystem(),
+        I.toAbsoluteSystem(),
+        J.toAbsoluteSystem(),
+        M.toAbsoluteSystem(),
+        N.toAbsoluteSystem(),
+        S.toAbsoluteSystem(),
+        T.toAbsoluteSystem(),
+        U.toAbsoluteSystem(),
+        V.toAbsoluteSystem(),
+        W.toAbsoluteSystem(),
+        Z.toAbsoluteSystem()
+    )
 
     companion object {
         fun default(absO: Point) = AllPoints(
@@ -1632,25 +1754,23 @@ private data class AllPoints(
         )
     }
 
-    fun toCoordinateSystem(absO: Point) = with(absO) {
-        AllPoints(
-            O.inCoordinateSystem(this),
-            A.inCoordinateSystem(this),
-            B.inCoordinateSystem(this),
-            C.inCoordinateSystem(this),
-            H.inCoordinateSystem(this),
-            I.inCoordinateSystem(this),
-            J.inCoordinateSystem(this),
-            M.inCoordinateSystem(this),
-            N.inCoordinateSystem(this),
-            S.inCoordinateSystem(this),
-            T.inCoordinateSystem(this),
-            U.inCoordinateSystem(this),
-            V.inCoordinateSystem(this),
-            W.inCoordinateSystem(this),
-            Z.inCoordinateSystem(this)
-        )
-    }
+    fun toCartesianSystem() = AllPoints(
+        O,
+        A.toCartesianSystem(),
+        B.toCartesianSystem(),
+        C.toCartesianSystem(),
+        H.toCartesianSystem(),
+        I.toCartesianSystem(),
+        J.toCartesianSystem(),
+        M.toCartesianSystem(),
+        N.toCartesianSystem(),
+        S.toCartesianSystem(),
+        T.toCartesianSystem(),
+        U.toCartesianSystem(),
+        V.toCartesianSystem(),
+        W.toCartesianSystem(),
+        Z.toCartesianSystem()
+    )
 
     fun getSymmetricalPointAboutLine(line: Line) = with(line) {
         AllPoints(
@@ -1672,3 +1792,21 @@ private data class AllPoints(
         )
     }
 }
+
+private fun AllPoints.toViewSystem(viewScreenWidthRatio: Float, viewScreenHeightRatio: Float) = AllPoints(
+    Point(O.x * viewScreenWidthRatio, O.y * viewScreenHeightRatio),
+    Point(A.x * viewScreenWidthRatio, A.y * viewScreenHeightRatio),
+    Point(B.x * viewScreenWidthRatio, B.y * viewScreenHeightRatio),
+    Point(C.x * viewScreenWidthRatio, C.y * viewScreenHeightRatio),
+    Point(H.x * viewScreenWidthRatio, H.y * viewScreenHeightRatio),
+    Point(I.x * viewScreenWidthRatio, I.y * viewScreenHeightRatio),
+    Point(J.x * viewScreenWidthRatio, J.y * viewScreenHeightRatio),
+    Point(M.x * viewScreenWidthRatio, M.y * viewScreenHeightRatio),
+    Point(N.x * viewScreenWidthRatio, N.y * viewScreenHeightRatio),
+    Point(S.x * viewScreenWidthRatio, S.y * viewScreenHeightRatio),
+    Point(T.x * viewScreenWidthRatio, T.y * viewScreenHeightRatio),
+    Point(U.x * viewScreenWidthRatio, U.y * viewScreenHeightRatio),
+    Point(V.x * viewScreenWidthRatio, V.y * viewScreenHeightRatio),
+    Point(W.x * viewScreenWidthRatio, W.y * viewScreenHeightRatio),
+    Point(Z.x * viewScreenWidthRatio, Z.y * viewScreenHeightRatio),
+)
