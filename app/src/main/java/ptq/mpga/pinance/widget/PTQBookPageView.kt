@@ -102,7 +102,7 @@ fun PTQBookPageView(
 
                     override fun dispatchDraw(canvas: Canvas?) {
                         if (width == 0 || height == 0) return
-                        val source = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        val source = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
                         val canvas2 = Canvas(source)
                         super.dispatchDraw(canvas2)
                         canvas2.setBitmap(null)
