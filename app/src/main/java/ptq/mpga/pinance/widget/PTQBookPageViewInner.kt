@@ -45,12 +45,12 @@ private const val animExitDuration = animEnterDuration //出动画时间
 
 private const val tapYDeltaRatio = 1 / 170f //点击翻页时，y方向偏移，不宜过大
 
-private const val shadowThreshold = 22f //阴影1、2阈值
+private const val shadowThreshold = 25f //阴影1、2阈值
 private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
-private const val shadow3VerticalThreshold = 50 //处理当接近垂直时，底层绘制api不正常工作的问题
+private const val shadow3VerticalThreshold = 100 //处理当接近垂直时，底层绘制api不正常工作的问题
 
-private val shadow12Color = Color.Black.copy(alpha = 0.3f) //12部分阴影的颜色
-private val shadow3Color = Color.Black.copy(alpha = 0.65f) //3部分阴影的颜色
+private val shadow12Color = Color.Black.copy(alpha = 0.35f) //12部分阴影的颜色
+private val shadow3Color = Color.Black.copy(alpha = 0.68f) //3部分阴影的颜色
 private val lustreColor = Color.Black.copy(alpha = 0.02f) //光泽部分阴影的颜色
 
 //最好设置为统一比例
@@ -94,31 +94,31 @@ internal fun PTQBookPageViewInner(
     val localConfig = LocalPTQBookPageViewConfig.current
 
     //组件宽高和原点O
-    val screenHeight = bounds.height
-    val screenWidth = bounds.width
+    val viewHeight = bounds.height
+    val viewWidth = bounds.width
 
     //扭曲格点数
     val bitmapMeshCount by remember(bounds) {
         mutableStateOf(
             Pair(
-                (screenWidth / distortionInterval).toInt(),
-                (screenHeight / distortionInterval).toInt()
+                (viewWidth / distortionInterval).toInt(),
+                (viewHeight / distortionInterval).toInt()
             )
         )
     }
 
     //可拖动范围
-    val dragXRange by remember(bounds) { mutableStateOf(FloatRange(0f, screenWidth * (1 - maxDragXRatio))) }
+    val dragXRange by remember(bounds) { mutableStateOf(FloatRange(0f, viewWidth * (1 - maxDragXRatio))) }
 
     //组件左上角
     val absO by remember { mutableStateOf(Point(0f, 0f)) }
     //Tap回调中的组件左上角
-    val leftUpOnTap by remember(bounds) { mutableStateOf(Point(0f, tapYDeltaRatio * screenHeight)) }
+    val leftUpOnTap by remember(bounds) { mutableStateOf(Point(0f, tapYDeltaRatio * viewHeight)) }
     //组件右下角
-    val absC by remember(bounds) { mutableStateOf(Point(screenWidth, screenHeight)) }
+    val absC by remember(bounds) { mutableStateOf(Point(viewWidth, viewHeight)) }
 
     //位于组件一半高度的直线，用于处理翻转，绝对坐标系
-    val lBCPerpendicularBisector by remember(bounds) { mutableStateOf(Line(0f, screenHeight / 2)) }
+    val lBCPerpendicularBisector by remember(bounds) { mutableStateOf(Line(0f, viewHeight / 2)) }
 
     //拖动事件，包括原触点，增量，现触点
     var curDragEvent by remember { mutableStateOf(DragEvent(absO.copy(), absO.copy())) }
@@ -179,12 +179,12 @@ internal fun PTQBookPageViewInner(
     val exeExitAnim = rememberUpdatedState {
         val startPoint = if (!upsideDown) allPoints.J else allPoints.J.getSymmetricalPointAbout(lBCPerpendicularBisector)
         f = maxOf(0f, allPoints.J.distanceTo(allPoints.H))
-        val y = if (!upsideDown) screenHeight - f else f
+        val y = if (!upsideDown) viewHeight - f else f
 
         val dragBehavior = callbacks.dragBehavior
 
         if (dragBehavior == null) {
-            val isFingerAtRight = curDragEvent.currentTouchPoint.x > 0.5f * screenWidth
+            val isFingerAtRight = curDragEvent.currentTouchPoint.x > 0.5f * viewWidth
 
             //记录是下一页还是前一页，用于动画结束后触发onNext/onPrevious回调
             if (isFingerAtRight && !isRightToLeftWhenStart) {
@@ -261,7 +261,7 @@ internal fun PTQBookPageViewInner(
                 val dragBehavior = callbacks.dragBehavior
 
                 if (dragBehavior == null) {
-                    val isFingerAtRight = curDragEvent.currentTouchPoint.x > 0.5f * screenWidth
+                    val isFingerAtRight = curDragEvent.currentTouchPoint.x > 0.5f * viewWidth
 
                     if (isFingerAtRight && !isRightToLeftWhenStart) {
                         isNextOrPrevious = false
@@ -312,7 +312,7 @@ internal fun PTQBookPageViewInner(
                     val onTapBehavior = callbacks.tapBehavior
 
                     val isLeftToRight = if (onTapBehavior == null) {
-                        touchPoint.x < 0.5f * screenWidth
+                        touchPoint.x < 0.5f * viewWidth
                     } else {
                         val result = onTapBehavior(leftUpOnTap.copy(), absC.copy(), touchPoint.copy())
 
@@ -334,7 +334,7 @@ internal fun PTQBookPageViewInner(
                     }
 
                     val startPoint = Point(x = if (isLeftToRight) -dragXRange.end * 0.5f else dragXRange.end, y = if (isLeftToRight) touchPoint.y - tapYDelta else touchPoint.y)
-                    f = screenHeight - touchPoint.y.absoluteValue
+                    f = viewHeight - touchPoint.y.absoluteValue
                     val endPoint = Point(x = if (isLeftToRight) dragXRange.end else -dragXRange.end * 0.5f, y = if (isLeftToRight) touchPoint.y else touchPoint.y - tapYDelta)
                     animLastPoint = startPoint.copy()
                     animStartAndEndPoint = DragEvent(startPoint.copy(), endPoint.copy())
@@ -370,7 +370,7 @@ internal fun PTQBookPageViewInner(
                     pageState = PageState.Loose
                     interruptedInDrag = false
                     curDragEvent = DragEvent(touchPoint, touchPoint)
-                    f = screenHeight - touchPoint.y.absoluteValue
+                    f = viewHeight - touchPoint.y.absoluteValue
                     animStartAndEndPoint = animStartAndEndPoint.copy(originTouchPoint = touchPoint)
                     time = System.currentTimeMillis()
                 },
@@ -422,7 +422,7 @@ internal fun PTQBookPageViewInner(
                             val isUpToDown = animStartAndEndPoint.currentTouchPoint.y > animStartAndEndPoint.originTouchPoint.y
                             if (isUpToDown) {
                                 upsideDown = true
-                                f = screenHeight - f
+                                f = viewHeight - f
                             }
                             animLastPoint = animStartAndEndPoint.originTouchPoint.copy()
                             state = State.EnterAnimStart
@@ -439,7 +439,7 @@ internal fun PTQBookPageViewInner(
                         val dragEvent = if (upsideDown) curDragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else curDragEvent
 
                         if (pageState == PageState.Tight) {
-                            val newTheta = onDragWhenTightState(f, theta, dragEvent, screenHeight, screenWidth)
+                            val newTheta = onDragWhenTightState(f, theta, dragEvent, viewHeight, viewWidth)
                             theta = newTheta
                         }
                     }
@@ -477,38 +477,33 @@ internal fun PTQBookPageViewInner(
             //计算本轮点坐标，如果有状态变化，则舍弃本轮（直接使用上一轮的allPoints）
             val newAllPoints = if (dragEvent != null && !dragEvent.isUnmoved) {
                 dragEvent = if (upsideDown) dragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else dragEvent
-
                 when (pageState) {
                     PageState.Loose -> {
-                        buildStateLoose(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f, upsideDown, state) { newState, newTheta, newUpsideDown ->
+                        buildStateLoose(absO.copy(), dragEvent, Point(viewWidth, viewHeight), f, upsideDown, state) { newState, newTheta, newUpsideDown ->
                             newUpsideDown?.let {
                                 upsideDown = it
-                                f = screenHeight - f
+                                f = viewHeight - f
                                 return@buildStateLoose
                             }
                             newState?.let { pageState = it }
                             newTheta?.let { theta = it }
-//                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
                         }
                     }
                     PageState.WMin -> {
-                        buildStateWMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
+                        buildStateWMin(absO.copy(), dragEvent, Point(viewWidth, viewHeight), f) { newState, newTheta ->
                             theta = newTheta
                             pageState = newState
-//                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
                         }
                     }
                     PageState.ThetaMin -> {
-                        buildStateThetaMin(absO.copy(), dragEvent, Point(screenWidth, screenHeight), f) { newState, newTheta ->
+                        buildStateThetaMin(absO.copy(), dragEvent, Point(viewWidth, viewHeight), f) { newState, newTheta ->
                             theta = newTheta
                             pageState = newState
-//                            Log.d(TAG, "PTQPageFlipper: state $pageState start")
                         }
                     }
                     PageState.Tight -> {
-                        buildStateTight(absO.copy(), Point(screenWidth, screenHeight), theta, dragEvent, f) { newState ->
+                        buildStateTight(absO.copy(), Point(viewWidth, viewHeight), theta, dragEvent, f) { newState ->
                             pageState = newState
-//                            Log.d(TAG, "PTQPageFlipper: state $newState start")
                         }
                     }
                 }
@@ -525,10 +520,17 @@ internal fun PTQBookPageViewInner(
             var upsideDownAllPoints = if (upsideDown) nonNullAllPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else nonNullAllPoints
 
             var (distortedEdges, distortedVertices) = upsideDownAllPoints
-                .toCartesianSystem().buildDistortionPoints(screenWidth, screenHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
+                .toCartesianSystem().buildDistortionPoints(viewWidth, viewHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
 
             //这里的逻辑可以再优化
             //如果newAllPoint为空，或者页面完全垂直，则舍弃本轮，使用上一轮的点重新计算
+//            val M = newAllPoints?.M
+//            val N = newAllPoints?.N
+//            val k = if (M != null && N!= null) Line.withTwoPoints(M, N).k else Float.NaN
+//            Log.d(TAG, ": ${distortedEdges[0].size} ${M} ${N} ${k}  ${if (M == null) {
+//                nonNullAllPoints.M.toString() + " " + nonNullAllPoints.N.toString() + " " + Line.withTwoPoints(nonNullAllPoints.M, nonNullAllPoints.N).k +"\n"
+//            } else "\n"}")
+
             if (distortedEdges[0].isNotEmpty()) {
                 if (newAllPoints != null) {
                     allPoints = newAllPoints
@@ -537,7 +539,7 @@ internal fun PTQBookPageViewInner(
                 if (newAllPoints != null) {
                     //newAllPoints不为null意味着使用的是本轮的点计算的，因此重算一次，如果为null则已经用的是allPoints算的了，不需要重算
                     upsideDownAllPoints = if (upsideDown) allPoints.getSymmetricalPointAboutLine(lBCPerpendicularBisector) else allPoints
-                    val lastAll = upsideDownAllPoints.toCartesianSystem().buildDistortionPoints(screenWidth, screenHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
+                    val lastAll = upsideDownAllPoints.toCartesianSystem().buildDistortionPoints(viewWidth, viewHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
                     distortedEdges = lastAll.first
                     distortedVertices = lastAll.second
                 }
@@ -555,102 +557,97 @@ internal fun PTQBookPageViewInner(
                     val nativeCanvas = it.nativeCanvas
                     //注意图层绘制顺序
 
-                    //点还没计算出来就只画当前
-                    if (upsideDownAllPoints.C.x == upsideDownAllPoints.O.x) {
-                        nativeCanvas.drawBitmap(currentBitmap, absO.x, absO.y, frameworkPaint)
-                        return@drawIntoCanvas
-                    }
-
-                    //画下一页
-                    nativeCanvas.drawBitmap(backgroundBitmap, absO.x, absO.y, frameworkPaint)
-
-                    //画阴影区域3
-                    frameworkPaint.shader =
-                        LinearGradient(
-                            shaderControlPointPairs[2].first.x,
-                            shaderControlPointPairs[2].first.y,
-                            shaderControlPointPairs[2].second.x,
-                            shaderControlPointPairs[2].second.y,
-                            nativeShadow3Color,
-                            nativeTransparentColor,
-                            Shader.TileMode.CLAMP
-                        )
-                    it.drawPath(shadowPaths[2], paint)
-                    it.clipPath(paths[2], ClipOp.Difference)
-
-//                    it.drawLine(shaderControlPointPairs[2].first.toOffset, shaderControlPointPairs[2].second.toOffset, paint.apply {
-//                        style = PaintingStyle.Stroke
-//                        strokeWidth = 3f
-//                        color = Color.Red
-//                        shader = null
-//                    })
+//                    //点还没计算出来就只画当前
+//                    if (upsideDownAllPoints.C.x == upsideDownAllPoints.O.x) {
+//                        nativeCanvas.drawBitmap(currentBitmap, absO.x, absO.y, frameworkPaint)
+//                        return@drawIntoCanvas
+//                    }
+//
+//                    //画下一页
+//                    nativeCanvas.drawBitmap(backgroundBitmap, absO.x, absO.y, frameworkPaint)
+//
+//                    //画阴影区域3
+//                    frameworkPaint.shader =
+//                        LinearGradient(
+//                            shaderControlPointPairs[2].first.x,
+//                            shaderControlPointPairs[2].first.y,
+//                            shaderControlPointPairs[2].second.x,
+//                            shaderControlPointPairs[2].second.y,
+//                            nativeShadow3Color,
+//                            nativeTransparentColor,
+//                            Shader.TileMode.CLAMP
+//                        )
+//                    it.drawPath(shadowPaths[2], paint)
+//                    it.clipPath(paths[2], ClipOp.Difference)
 
                     //画当前页
+//                    frameworkPaint.shader = null
+//                    frameworkPaint.color = nativePageColor
+//                    it.drawPath(paths[0], paint)
+//                    nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
+
+//                    //画阴影区域1
+//                    frameworkPaint.shader = LinearGradient(
+//                        shaderControlPointPairs[0].first.x,
+//                        shaderControlPointPairs[0].first.y,
+//                        shaderControlPointPairs[0].second.x,
+//                        shaderControlPointPairs[0].second.y,
+//                        nativeShadow12Color,
+//                        nativeTransparentColor,
+//                        Shader.TileMode.CLAMP
+//                    )
+//                    it.drawPath(shadowPaths[0], paint)
+//
+//                    //画阴影区域2
+//                    frameworkPaint.shader = LinearGradient(
+//                        shaderControlPointPairs[1].first.x,
+//                        shaderControlPointPairs[1].first.y,
+//                        shaderControlPointPairs[1].second.x,
+//                        shaderControlPointPairs[1].second.y,
+//                        nativeShadow12Color,
+//                        nativeTransparentColor,
+//                        Shader.TileMode.CLAMP
+//                    )
+//                    it.drawPath(shadowPaths[1], paint)
+//
+//                    //画阴影区域4（圆弧）
+//                    frameworkPaint.shader =
+//                        RadialGradient(shaderControlPointPairs[0].first.x, shaderControlPointPairs[0].first.y, shadow12Width, nativeShadow12Color, nativeTransparentColor, Shader.TileMode.CLAMP)
+//                    it.drawPath(shadowPaths[3], paint)
+//
+//                    //画当前页背面
                     frameworkPaint.shader = null
-                    frameworkPaint.color = nativePageColor
-                    it.drawPath(paths[0], paint)
-                    nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
-
-                    //画阴影区域1
-                    frameworkPaint.shader = LinearGradient(
-                        shaderControlPointPairs[0].first.x,
-                        shaderControlPointPairs[0].first.y,
-                        shaderControlPointPairs[0].second.x,
-                        shaderControlPointPairs[0].second.y,
-                        nativeShadow12Color,
-                        nativeTransparentColor,
-                        Shader.TileMode.CLAMP
-                    )
-                    it.drawPath(shadowPaths[0], paint)
-
-                    //画阴影区域2
-                    frameworkPaint.shader = LinearGradient(
-                        shaderControlPointPairs[1].first.x,
-                        shaderControlPointPairs[1].first.y,
-                        shaderControlPointPairs[1].second.x,
-                        shaderControlPointPairs[1].second.y,
-                        nativeShadow12Color,
-                        nativeTransparentColor,
-                        Shader.TileMode.CLAMP
-                    )
-                    it.drawPath(shadowPaths[1], paint)
-
-                    //画阴影区域4（圆弧）
-                    frameworkPaint.shader =
-                        RadialGradient(shaderControlPointPairs[0].first.x, shaderControlPointPairs[0].first.y, shadow12Width, nativeShadow12Color, nativeTransparentColor, Shader.TileMode.CLAMP)
-                    it.drawPath(shadowPaths[3], paint)
-
-                    //画当前页背面
-                    frameworkPaint.shader = null
-                    frameworkPaint.color = nativePageColor
+                    frameworkPaint.color = /*nativePageColor*/android.graphics.Color.toArgb(Color.Black.value.toLong())
+                    paint.style = PaintingStyle.Stroke
+                    paint.strokeWidth = 3f
                     it.drawPath(paths[1], paint)
-
-                    //画光泽左侧阴影
-                    frameworkPaint.shader = LinearGradient(
-                        shaderControlPointPairs[3].first.x,
-                        shaderControlPointPairs[3].first.y,
-                        shaderControlPointPairs[3].second.x,
-                        shaderControlPointPairs[3].second.y,
-                        nativeLustreColor,
-                        nativeTransparentColor,
-                        Shader.TileMode.CLAMP
-                    )
-                    it.drawPath(shadowPaths[4], paint)
-
-                    //画光泽右侧阴影
-                    frameworkPaint.shader = LinearGradient(
-                        shaderControlPointPairs[4].first.x,
-                        shaderControlPointPairs[4].first.y,
-                        shaderControlPointPairs[4].second.x,
-                        shaderControlPointPairs[4].second.y,
-                        nativeLustreColor,
-                        nativeLustreColor,
-                        Shader.TileMode.CLAMP
-                    )
-                    it.drawPath(shadowPaths[5], paint)
+//
+//                    //画光泽左侧阴影
+//                    frameworkPaint.shader = LinearGradient(
+//                        shaderControlPointPairs[3].first.x,
+//                        shaderControlPointPairs[3].first.y,
+//                        shaderControlPointPairs[3].second.x,
+//                        shaderControlPointPairs[3].second.y,
+//                        nativeLustreColor,
+//                        nativeTransparentColor,
+//                        Shader.TileMode.CLAMP
+//                    )
+//                    it.drawPath(shadowPaths[4], paint)
+//
+//                    //画光泽右侧阴影
+//                    frameworkPaint.shader = LinearGradient(
+//                        shaderControlPointPairs[4].first.x,
+//                        shaderControlPointPairs[4].first.y,
+//                        shaderControlPointPairs[4].second.x,
+//                        shaderControlPointPairs[4].second.y,
+//                        nativeLustreColor,
+//                        nativeLustreColor,
+//                        Shader.TileMode.CLAMP
+//                    )
+//                    it.drawPath(shadowPaths[5], paint)
                 }
                 //加强一下轮廓
-                drawPath(paths[1], shadow12Color.copy(alpha = 0.25f), style = Stroke(width = 1f))
+                drawPath(paths[1], shadow12Color.copy(alpha = 0.12f), style = Stroke(width = 1.75f))
             })
         }
     }
@@ -1082,10 +1079,10 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val thisPageBack = Path().apply {
         moveTo(M)
         lineTo(N)
-        connect(NVJ, isUpsideDown)
-        lineTo(H)
-        connect(MUI, true)
-        lineTo(M)
+//        connect(NVJ, isUpsideDown)
+//        lineTo(H)
+//        connect(MUI, true)
+//        lineTo(M)
     }
 
     val nextPage = Path().apply {
@@ -1159,16 +1156,14 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val shadow3 = Path().apply {
         moveTo(W)
         lineTo(S1)
-
-        //若接近垂直，则直接画成方形，否则画梯形（计算使用Screen系，构建Path使用View系）
-        if ((T1.y / C.y).absoluteValue > shadow3VerticalThreshold) {
-            lineTo(S1.copy(y = C.y.absoluteValue - S1.y))
-            lineTo(W.copy(y = C.y.absoluteValue - W.y))
+        //若接近垂直，则直接画成方形，否则画梯形
+        if (((T1.y - O.y) / (C.y - O.y)).absoluteValue > shadow3VerticalThreshold) {
+            lineTo(S1.copy(y = (C.y - O.y).absoluteValue - S1.y))
+            lineTo(W.copy(y = (C.y - O.y).absoluteValue - W.y))
         } else {
             lineTo(T1)
             lineTo(Z)
         }
-
         close()
     }
 

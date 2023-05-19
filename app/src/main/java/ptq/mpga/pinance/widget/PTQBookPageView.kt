@@ -111,7 +111,7 @@ fun PTQBookPageView(
                 }
             }
         )
-        Log.d(TAG, "PTQBookPageView: q")
+//        Log.d(TAG, "PTQBookPageView: q")
 
         //貌似必须包裹在CompositionLocalProvider，否则就会不断重组，没想通为什么
         CompositionLocalProvider(

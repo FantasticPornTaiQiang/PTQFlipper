@@ -262,7 +262,6 @@ fun PTQView() {
                                     } else {
                                         arrayOf(0f, 0f, 0f, 0f)
                                     }
-                                    Log.d(TAG, "PTQView: ${padding.joinToString(" ")} $screenH $screenW ")
                                     diySize = !diySize
                                 }, modifier = Modifier.padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
                             ) {
