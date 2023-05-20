@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
@@ -40,6 +41,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
@@ -62,10 +65,18 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContent {
             PinanceTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(color = MaterialTheme.colors.background) {
+                    val systemUiController = rememberSystemUiController()
+
+                    LaunchedEffect(Unit) {
+                        systemUiController.setStatusBarColor(Color.Transparent)
+                        systemUiController.setNavigationBarColor(Color.Transparent)
+                    }
 
                     PTQView()
 //                    DrawTest()
@@ -170,29 +181,29 @@ fun PTQView() {
                 }
             }
 
-        tapBehavior { leftUp, rightDown, touchPoint ->
-            val middle = (rightDown - leftUp).x / 2
-            return@tapBehavior touchPoint.x > middle
-        }
-
-        responseDragWhen { rightDown, startTouchPoint, currentTouchPoint ->
-            return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
-        }
-
-        dragBehavior { rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
-            val isFingerAtRight = lastTouchPoint.x > rightDown.x / 2
-
-            var isNext: Boolean? = null
-            if (isRightToLeftWhenStart && !isFingerAtRight) {
-                isNext = true
+            tapBehavior { leftUp, rightDown, touchPoint ->
+                val middle = (rightDown - leftUp).x / 2
+                return@tapBehavior touchPoint.x > middle
             }
 
-            if (!isRightToLeftWhenStart && isFingerAtRight) {
-                isNext = false
+            responseDragWhen { rightDown, startTouchPoint, currentTouchPoint ->
+                return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
             }
 
-            return@dragBehavior Pair(!isFingerAtRight, isNext)
-        }
+            dragBehavior { rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
+                val isFingerAtRight = lastTouchPoint.x > rightDown.x / 2
+
+                var isNext: Boolean? = null
+                if (isRightToLeftWhenStart && !isFingerAtRight) {
+                    isNext = true
+                }
+
+                if (!isRightToLeftWhenStart && isFingerAtRight) {
+                    isNext = false
+                }
+
+                return@dragBehavior Pair(!isFingerAtRight, isNext)
+            }
 
             contents { index, refresh ->
                 Box(
@@ -201,27 +212,27 @@ fun PTQView() {
                         .background(config.pageColor)
                 ) {
                     when {
-//                                    index < all.size -> {
-//                                        Image(
-//                                            painter = painterResource(id = all[index]), contentDescription = "xinhai", modifier = Modifier
-//                                                .wrapContentSize(Alignment.Center)
-//                                                .align(Alignment.Center)
-//                                        )
-//                                    }
-                        index < /*all.size + */3 -> {
+                        index < all.size -> {
+                            Image(
+                                painter = painterResource(id = all[index]), contentDescription = "xinhai", modifier = Modifier
+                                    .wrapContentSize(Alignment.Center)
+                                    .align(Alignment.Center)
+                            )
+                        }
+                        index < all.size + 3 -> {
                             when (index) {
-                                /*all.size + 1*/0 -> {
-                                LazyColumn {
-                                    item {
-                                        Text(text + text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                all.size + 1 -> {
+                                    LazyColumn {
+                                        item {
+                                            Text(text + text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                        }
                                     }
                                 }
-                            }
-                                /*all.size + 2*/1 -> {
-                                Column {
-                                    Text(text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                all.size + 2 -> {
+                                    Column {
+                                        Text(text2, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
+                                    }
                                 }
-                            }
                                 else -> {
                                     Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                                         Image(painter = painterResource(id = R.drawable.xinhai2), contentDescription = "xinhai2")
