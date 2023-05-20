@@ -74,76 +74,13 @@ class MainActivity : AppCompatActivity() {
                     val systemUiController = rememberSystemUiController()
 
                     LaunchedEffect(Unit) {
-                        systemUiController.setStatusBarColor(Color.Transparent)
+                        systemUiController.setStatusBarColor(Color.Transparent, true)
                         systemUiController.setNavigationBarColor(Color.Transparent)
                     }
 
                     PTQView()
-//                    DrawTest()
                 }
             }
-        }
-    }
-}
-
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun DrawTest() {
-    var start by remember { mutableStateOf(Offset.Zero) }
-    var end by remember { mutableStateOf(Offset.Zero) }
-    var dragStart by remember { mutableStateOf(false) }
-    Box(modifier = Modifier
-        .offset(50.dp)
-        .size(300.dp)
-        .background(Color.Green)
-//        .pointerInput(Unit) {
-//            detectTapGestures {
-//                Log.d(TAG, "DrawTest: $it")
-//            }
-//        }
-        .pointerInput(Unit) {
-            var cur = Offset.Zero
-            detectDragGestures(
-                onDrag = { _, delta ->
-                    cur += delta
-                },
-                onDragStart = {
-                    start = it
-                    cur = it
-                    dragStart = true
-                },
-                onDragEnd = {
-                    end = cur
-                    dragStart = false
-                }
-            )
-        }) {
-        if (!dragStart) {
-            Canvas(modifier = Modifier.fillMaxSize(), onDraw = {
-                Log.d(TAG, "DrawTest: ${start}")
-//                drawRect(color = Color.Red, topLeft = start, style = Stroke(width = 2f), size = )
-                drawIntoCanvas {
-                    val paint = Paint()
-                    val rect = RectF(start.x, start.y, end.x, end.y)
-//                    it.nativeCanvas.drawRect(rect, paint.apply {
-//                        color = android.graphics.Color.toArgb(Color.Red.value.toLong())
-//                    })
-                    it.drawPath(Path().apply {
-                        moveTo(start.x, start.y)
-                        lineTo(end.x, end.y)
-                    }, paint.apply {
-                        color = Color.Red
-                        strokeWidth = 2f
-                        style = PaintingStyle.Stroke
-                    })
-                }
-
-//                drawPath(Path().apply {
-//                    moveTo(start.x, start.y)
-//                    lineTo(end.x, end.y)
-//                }, color = Color.Red)
-            })
         }
     }
 }
@@ -317,115 +254,6 @@ fun PTQView() {
 
         })
 }
-
-
-//@Composable
-//fun Test(content: @Composable () -> Unit) {
-//    val contentBlock by remember {
-//        derivedStateOf {
-//            Log.d(TAG, "Test: po")
-//            content
-//        }
-//    }
-//
-//    AndroidView(
-//        modifier = Modifier.fillMaxSize(),
-//        factory = { context ->
-//            object : AbstractComposeView(context) {
-//
-//                @Composable
-//                override fun Content() {
-//                    Log.d(TAG, "Content: abc0")
-//                    Box(
-//                        Modifier
-//                            .fillMaxSize()
-//                    ) {
-//                        Log.d(TAG, "Content: abc")
-//                        contentBlock()
-//                        Text("123123123123123123123123213")
-//                    }
-//
-//                    SideEffect {
-//                        Log.d(TAG, "onCreate: 12345689")
-//                    }
-//                }
-//
-//                override fun onDraw(canvas: Canvas?) {
-//                    super.onDraw(canvas)
-//                    Log.d(TAG, "onDraw: 123")
-//                }
-//
-//            }
-//        }
-//    )
-////    block.value()
-//}
-
-//@Composable
-//fun Test() {
-//    val colorList = arrayOf(Color.Black, Color.Gray, Color.Green, Color.Red, Color.Cyan)
-//
-//    var color by remember {
-//        mutableStateOf(Color.Black)
-//    }
-//
-//    Box(modifier = Modifier
-//        .fillMaxSize()
-//        .drawWithCache {
-//            onDrawWithContent {
-//                drawCircle(color, radius = 50f, center = Offset.Zero)
-//                drawContent()
-//            }
-//        }) {
-//        Button(onClick = { color = colorList.random(); Log.d("aaa", "Test: aaa") }, modifier = Modifier.align(Alignment.Center)) {
-//            Text("点我")
-//        }
-//    }
-//}
-
-@Composable
-fun Test(color: Color) {
-    AndroidView(factory = {
-        object : AbstractComposeView(it) {
-
-            @Composable
-            override fun Content() {
-                var text by remember { mutableStateOf(0L) }
-
-                Button(onClick = { text = System.currentTimeMillis() }) {
-                    Text(text = text.toString(), color = color)
-                }
-            }
-
-        }
-    })
-}
-
-
-//@Composable
-//fun Test() {
-//    Log.d("aaa", "Test: 3")
-//    Trigger()
-//
-//    Box {
-//        Log.d("aaa", "Test: 2")
-//    }
-//}
-//
-//@Composable
-//fun Trigger() {
-//    var trigger by remember { mutableStateOf(false) }
-//    Box {
-//
-//        Log.d("aaa", "Test: 1")
-//        Button(onClick = {
-//            trigger = !trigger
-//        }) {
-//
-//        }
-//    }
-//}
-
 
 private const val text = "晨曦的微光透过半开都窗户衍射进屋内\n" +
         "\n" +
