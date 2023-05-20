@@ -10,6 +10,18 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Pinance">
         <activity
+            android:name=".NovelActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Pinance.NoActionBar" />
+        <activity
+            android:name=".AlbumActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Pinance.NoActionBar" />
+        <activity
+            android:name=".GalleryActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Pinance.NoActionBar" />
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"

@@ -651,7 +651,7 @@ internal fun PTQBookPageViewInner(
                     it.drawPath(shadowPaths[5], paint)
                 }
                 //加强一下轮廓
-                drawPath(paths[1], shadow12Color.copy(alpha = 0.12f), style = Stroke(width = 1.75f))
+                drawPath(paths[3], shadow12Color.copy(alpha = 0.14f), style = Stroke(width = 1.75f))
             })
         }
     }
@@ -1100,6 +1100,16 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
         lineTo(C)
     }
 
+    val outline = Path().apply {
+        moveTo(W)
+        connect(WSM)
+        connect(MUI)
+        lineTo(H)
+        lineTo(J)
+        connect(NVJ, !isUpsideDown)
+        connect(ZTN, !isUpsideDown)
+    }
+
     //计算阴影
     val lHF = Line.withTwoPoints(J, H)
     val lHE = Line.withTwoPoints(H, I)
@@ -1223,7 +1233,7 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val lHC = Line.withTwoPoints(H, C)
 
     return PathResult(
-        listOf(thisPage, thisPageBack, nextPage),
+        listOf(thisPage, thisPageBack, nextPage, outline),
         listOf(shadow1, shadow2, shadow3, shadow4, lustreEndShadow, lustreStartShadow),
         listOf(
             Pair(

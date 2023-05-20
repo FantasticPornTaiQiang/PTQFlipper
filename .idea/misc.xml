@@ -1,7 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/MyAndroidProject/PTQFlipper/app/src/main/res/layout/activity_novel.xml" value="0.5536458333333333" />
         <entry key="..\:/MyAndroidProject/pinance/app/src/main/res/drawable/bg_room_chat_message.xml" value="0.22592592592592592" />
         <entry key="..\:/MyAndroidProject/pinance/app/src/main/res/drawable/ic_launcher_background.xml" value="0.32222222222222224" />
         <entry key="..\:/MyAndroidProject/pinance/app/src/main/res/layout/activity_main.xml" value="0.264" />
