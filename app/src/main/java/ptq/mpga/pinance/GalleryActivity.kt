@@ -10,7 +10,6 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
@@ -33,7 +32,6 @@ import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
-import kotlin.random.Random
 
 private val galleryList = arrayOf(
     R.drawable.gallery1,
@@ -77,7 +75,7 @@ class GalleryActivity : AppCompatActivity() {
                     val ctx = LocalContext.current
 
                     PTQBookPageView(state = state, config = config) {
-                        onUserWantToChange { currentPage, isNextOrPrevious, success ->
+                        onTurnPageRequest { currentPage, isNextOrPrevious, success ->
                             if (!success) {
                                 Toast.makeText(ctx, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
                             } else {

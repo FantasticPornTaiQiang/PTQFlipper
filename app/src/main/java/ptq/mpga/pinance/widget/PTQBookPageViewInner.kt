@@ -39,7 +39,7 @@ private const val stateTightDragRightScreenDistanceRatio = 1 / 40f //tight状态
 private const val maxDragXRatio = stateTightDragRightScreenDistanceRatio //手指最大X，和上个变量一样
 private const val minWxRatio = 1 / 25f //W.x的最小值
 
-private const val animStartTimeout = 75//动画在手指拖动多久后开始，此值不宜过大，会造成不准确
+private const val animStartTimeout = 70//动画在手指拖动多久后开始，此值不宜过大，会造成不准确
 private const val animEnterDuration = 100 //入动画时间，此值不宜过大，会造成不准确
 private const val animExitDuration = animEnterDuration //出动画时间
 
@@ -61,15 +61,13 @@ private const val lustreEndMinDistance = 6f //光泽左侧最小距离，即当W
 private const val lustreEndShadowMaxWidth = 24f //光泽左侧阴影最大宽度
 private const val lustreEndShadowMinWidth = 16f //光泽左侧阴影最小宽度，即当WEmin时的宽度
 
-private const val distortionInterval = 12 //扭曲的间隔
+private const val distortionInterval = 16 //扭曲的间隔
 
 private enum class PageState {
     Loose, WMin, ThetaMin, Tight
 }
 
-/**
- * 翻页器组件的流程状态
- */
+//翻页器组件的流程状态
 private enum class State {
     Idle, EnterAnimStart, Draggable, ExitAnimStart, ExitAnimPreStart
 }
@@ -133,6 +131,8 @@ internal fun PTQBookPageViewInner(
      * 点击和拖动时起手是右往左还是左往右（受[PTQBookPageViewScope.tapBehavior]和[PTQBookPageViewScope.dragBehavior]控制）
      */
     var isRightToLeftWhenStart by remember { mutableStateOf(true) }
+    //有可能onDrag中没有进入开始动画（除第一页最后一页的情况外）（例如手指的触摸时间很短），这时自然不应该响应onDragEnd，因此这个变量保证开始动画一定执行了（换句话说，保证onDragEnd中，state=State.Idle的触发条件只有第一页和最后一页的情况
+    var turnPageRequestWhenDrag by remember { mutableStateOf(false) }
     //应该是下一页还是上一页，因为要等动画结束才能算完全翻完页，所以回调要在动画结束之后，因此需要一个变量记录一下状态
     var isNextOrPrevious by remember { mutableStateOf<Boolean?>(null) }
     /**
@@ -213,7 +213,7 @@ internal fun PTQBookPageViewInner(
 
     //动画
     val animFloatRatio by animateFloatAsState(targetValue = if (state == State.EnterAnimStart || state == State.ExitAnimStart) 1f else 0f, finishedListener = {
-        //动画结束时
+        //动画结束时触发的回调
         when (state) {
             State.EnterAnimStart -> {
                 state = if (exitPreStartState) State.ExitAnimPreStart else State.Draggable
@@ -236,12 +236,12 @@ internal fun PTQBookPageViewInner(
                 isNextOrPrevious = null
                 interruptedInDrag = false
                 dragInitialPoint = absO.copy()
+                turnPageRequestWhenDrag = false
             }
             State.ExitAnimPreStart -> { //确保animFloatRatio回到0f
                 exeExitAnim.value()
             }
-            else -> {
-            }
+            else -> { }
         }
     }, animationSpec = TweenSpec(easing = LinearEasing, durationMillis = if (state == State.EnterAnimStart) animDuration[0] else if (state == State.ExitAnimStart) animDuration[1] else 0))
 
@@ -258,28 +258,31 @@ internal fun PTQBookPageViewInner(
             }
             //处理第一页或者最后一页（第一页或者最后一页时，所有流程的最后）
             State.Idle -> {
-                val dragBehavior = callbacks.dragBehavior
+                if (turnPageRequestWhenDrag) {
+                    val dragBehavior = callbacks.dragBehavior
 
-                if (dragBehavior == null) {
-                    val isFingerAtRight = curDragEvent.currentTouchPoint.x > 0.5f * viewWidth
+                    if (dragBehavior == null) {
+                        val isFingerAtRight = curDragEvent.currentTouchPoint.x > 0.5f * viewWidth
 
-                    if (isFingerAtRight && !isRightToLeftWhenStart) {
-                        isNextOrPrevious = false
+                        if (isFingerAtRight && !isRightToLeftWhenStart) {
+                            isNextOrPrevious = false
+                        }
+
+                        if (!isFingerAtRight && isRightToLeftWhenStart) {
+                            isNextOrPrevious = true
+                        }
+                    } else {
+                        val (_, isNext) = dragBehavior(absC, dragInitialPoint, curDragEvent.currentTouchPoint, isRightToLeftWhenStart)
+
+                        isNext?.let {
+                            isNextOrPrevious = it
+                        }
                     }
 
-                    if (!isFingerAtRight && isRightToLeftWhenStart) {
-                        isNextOrPrevious = true
-                    }
-
-                } else {
-                    val (_, isNext) = dragBehavior(absC, dragInitialPoint, curDragEvent.currentTouchPoint, isRightToLeftWhenStart)
-
-                    isNext?.let {
-                        isNextOrPrevious = it
-                    }
+                    if (isNextOrPrevious == true) onNext() else if (isNextOrPrevious == false) onPrevious()
                 }
 
-                if (isNextOrPrevious == true) onNext() else if (isNextOrPrevious == false) onPrevious()
+                turnPageRequestWhenDrag = false
                 isNextOrPrevious = null
             }
             else -> {}
@@ -352,7 +355,7 @@ internal fun PTQBookPageViewInner(
             dragXRange,
             leftUpOnTap,
             absC,
-            interruptedInDrag
+            interruptedInDrag,
         ) {
             detectDragGestures(
                 onDragStart = { viewSystemOffset: Offset ->
@@ -413,6 +416,7 @@ internal fun PTQBookPageViewInner(
                             if ((isRightToLeft && controller.currentPage >= controller.totalPage - 1) ||
                                 (!isRightToLeft && controller.currentPage <= 0)
                             ) {
+                                turnPageRequestWhenDrag = true
                                 return@detectDragGestures
                             }
 
@@ -439,8 +443,7 @@ internal fun PTQBookPageViewInner(
                         val dragEvent = if (upsideDown) curDragEvent.getSymmetricalDragEventAbout(lBCPerpendicularBisector) else curDragEvent
 
                         if (pageState == PageState.Tight) {
-                            val newTheta = onDragWhenTightState(f, theta, dragEvent, viewHeight, viewWidth)
-                            theta = newTheta
+                            theta = onDragWhenTightState(f, theta, dragEvent, viewHeight, viewWidth)
                         }
                     }
                 },
@@ -459,7 +462,7 @@ internal fun PTQBookPageViewInner(
             callbacks.contents(this, controller.currentPage) {}
         } else {
             //如果正在动画，则使用动画的animDragEvent，否则使用拖动的
-            var dragEvent = when (state) {
+            val dragEvent = when (state) {
                 State.EnterAnimStart, State.ExitAnimStart -> {
                     val curPoint = animStartAndEndPoint.originTouchPoint + animStartAndEndPoint.dragDelta * animFloatRatio
                     val animDragEvent = DragEvent(animLastPoint, curPoint)
@@ -533,13 +536,6 @@ internal fun PTQBookPageViewInner(
                 .toCartesianSystem().buildDistortionPoints(viewWidth, viewHeight, bitmapMeshCount.first, bitmapMeshCount.second, upsideDown)
 
             //如果newAllPoint为空，或者页面完全垂直，则舍弃本轮，使用上一轮的点重新计算
-//            val M = newAllPoints?.M
-//            val N = newAllPoints?.N
-//            val k = if (M != null && N!= null) Line.withTwoPoints(M, N).k else Float.NaN
-//            Log.d(TAG, ": ${distortedEdges[0].size} ${M} ${N} ${k}  ${if (M == null) {
-//                nonNullAllPoints.M.toString() + " " + nonNullAllPoints.N.toString() + " " + Line.withTwoPoints(nonNullAllPoints.M, nonNullAllPoints.N).k +"\n"
-//            } else "\n"}")
-
             if (newAllPoints != null) {
                 if (distortedEdges[0].isNotEmpty()) {
                     allPoints = newAllPoints
@@ -623,7 +619,7 @@ internal fun PTQBookPageViewInner(
 
                     //画当前页背面
                     frameworkPaint.shader = null
-                    frameworkPaint.color = nativePageColor /*android.graphics.Color.toArgb(Color.Black.value.toLong())*/
+                    frameworkPaint.color = nativePageColor
                     it.drawPath(paths[1], paint)
 
                     //画光泽左侧阴影
@@ -651,7 +647,7 @@ internal fun PTQBookPageViewInner(
                     it.drawPath(shadowPaths[5], paint)
                 }
                 //加强一下轮廓
-                drawPath(paths[3], shadow12Color.copy(alpha = 0.14f), style = Stroke(width = 1.75f))
+                drawPath(paths[3], shadow12Color.copy(alpha = 0.14f), style = Stroke(width = 1.8f))
             })
         }
     }
@@ -905,29 +901,30 @@ private fun algorithmStateThetaMin(absO: Point, absTouchPoint: Point, absC: Poin
 private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: DragEvent, screenHeight: Float, screenWidth: Float): Float {
     val dragEvent = absDragEvent.toCartesianSystem()
 
-    return when (dragEvent.directionToOInCartesianSystem()) {
+    val res = when (dragEvent.directionToOInCartesianSystem()) {
         DragDirection.Right -> {
-            val delta = getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
-            currentTheta + delta
+            getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
         }
         DragDirection.Up -> {
-            val delta = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
-            currentTheta + delta
+            getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
         }
         //左下、下、左、左上、右下
         DragDirection.LeftDown, DragDirection.Down, DragDirection.Left, DragDirection.LeftUp, DragDirection.RightDown -> {
-            val (_, delta) = getTightStateDeltaWhenBack(f, currentTheta, absDragEvent, screenWidth, screenHeight)
-            currentTheta + delta
+            getTightStateDeltaWhenBack(f, currentTheta, absDragEvent, screenWidth, screenHeight)
         }
         //右上
         DragDirection.RightUp -> {
             val deltaRight = getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
             val deltaUp = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
             val yToX = -absDragEvent.dragDelta.y / absDragEvent.dragDelta.x
-            currentTheta + (yToX / (1 + yToX)) * deltaUp + (1 / (1 + yToX)) * deltaRight
+            (yToX / (1 + yToX)) * deltaUp + (1 / (1 + yToX)) * deltaRight
         }
-        else -> currentTheta
+        else -> 0f
     }
+
+    Log.d(TAG, "onDragWhenTightState:${dragEvent.directionToOInCartesianSystem()} $res")
+
+    return currentTheta + res
 }
 
 private fun getTightStateDeltaWhenUp(currentTheta: Float, dragDeltaY: Float): Float {
@@ -943,18 +940,18 @@ private fun getTightStateDeltaWhenRight(currentTheta: Float, currentFingerX: Flo
     return newTheta - currentTheta
 }
 
-private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent: DragEvent, screenWidth: Float, screenHeight: Float): Pair<Point, Float> {
-    val C = Point(screenWidth, screenHeight).toCartesianSystem()
+private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent: DragEvent, screenWidth: Float, screenHeight: Float): Float {
+    val C = Point(screenWidth, -screenHeight)
     val W = Point(minWxRatio * screenWidth, C.y)
     val E = Point(W.x + stateTightMinWERatio * C.x, C.y)
     val Rc = if (dragEvent.dragDelta.x == 0f) {
         val q = dragEvent.currentTouchPoint.x
         val a = 1f
         val b = -2 * C.y
-        val c = C.y.pow(2) - f.pow(2) - (C.x - q) * (C.x + q - 2 * E.x)
+        val c = C.y * C.y - f * f - (C.x - q) * (C.x + q - 2 * E.x)
         val RyEquation = QuadraticEquationWithOneUnknown(a, b, c)
         val Ry = RyEquation.solve().run {
-            if (size < 2) return Pair(Point(Float.NaN, Float.NaN), 0f) else {
+            if (size < 2) return 0f else {
                 maxOf(this[0].absoluteValue, this[1].absoluteValue)
             }
         }
@@ -964,12 +961,12 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
         val m = touchLine.k
         val n = touchLine.b
 
-        val a = 1 + m.pow(2)
+        val a = 1 + m * m
         val b = 2 * (m * n - m * C.y - E.x)
-        val c = n.pow(2) + C.y.pow(2) - f.pow(2) - 2 * n * C.y - C.x.pow(2) + 2 * C.x * E.x
+        val c = n * n + C.y * C.y - f * f - 2 * n * C.y - C.x * C.x + 2 * C.x * E.x
         val RxEquation = QuadraticEquationWithOneUnknown(a, b, c)
         val Rx = RxEquation.solve().run {
-            if (size < 2) return Pair(Point(Float.NaN, Float.NaN), 0f) else {
+            if (size < 2) return 0f else {
                 maxOf(this[0], this[1])
             }
         }
@@ -980,7 +977,8 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
     val finalTheta = theta(-1 / finalK)
 
     if (finalTheta < minTheta) {
-        return Pair(Point(Float.NaN, Float.NaN), 0f)
+        Log.d(TAG, "getTightStateDeltaWhenBack: min ${minTheta.toDeg()} cur ${finalTheta.toDeg()}")
+        return 0f
     }
 
     val thetaRange = FloatRange(minOf(currentTheta, finalTheta), finalTheta)
@@ -991,7 +989,7 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
     val newFingerValue = dragEvent.currentTouchPoint.toCartesianSystem().distanceTo(originTouchPoint)
     val newTheta = fingerRange.linearMappingWithConstraints(newFingerValue, thetaRange).run { thetaRange.constraints(this) }
 
-    return Pair(Rc, newTheta - currentTheta)
+    return newTheta - currentTheta
 }
 
 private fun buildStateTight(absO: Point, absC: Point, theta: Float, dragEvent: DragEvent, f: Float, changeState: (newPageState: PageState) -> Unit): AllPoints? {

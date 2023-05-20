@@ -3,7 +3,6 @@ package ptq.mpga.pinance.widget
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -11,10 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.viewinterop.AndroidView
 
@@ -22,13 +19,13 @@ private const val TAG = "PTQBookPageView"
 
 internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
     var contents: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit = { _, _ -> }
-    var onPageWantToChange: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
+    var onTurnPageRequest: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
     var tapBehavior: ((leftUp: Point, rightDown: Point, touchPoint: Point) -> Boolean?)? = null
     var dragBehavior: ((rightDown: Point, initialTouchPoint: Point, lastTouchPoint: Point, isRightToLeftWhenStart: Boolean) -> Pair<Boolean, Boolean?>)? = null
     var responseDragWhen: ((rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)? = null
 
-    override fun onUserWantToChange(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit) {
-        onPageWantToChange = block
+    override fun onTurnPageRequest(block: (currentPage: Int, nextOrPrevious: Boolean, success: Boolean) -> Unit) {
+        onTurnPageRequest = block
     }
 
     override fun contents(block: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit) {
@@ -111,7 +108,6 @@ fun PTQBookPageView(
                 }
             }
         )
-//        Log.d(TAG, "PTQBookPageView: q")
 
         //貌似必须包裹在CompositionLocalProvider，否则就会不断重组，没想通为什么
         CompositionLocalProvider(
@@ -135,16 +131,16 @@ fun PTQBookPageView(
                     onNext = {
                         if (state.currentPage == null && controller.currentPage < controller.totalPage - 1) {
                             controller.needBitmapAt(controller.currentPage + 1)
-                            callbacks.value.onPageWantToChange(controller.currentPage, true, true)
+                            callbacks.value.onTurnPageRequest(controller.currentPage, true, true)
                         } else {
-                            callbacks.value.onPageWantToChange(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
+                            callbacks.value.onTurnPageRequest(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
                         }
                     }, onPrevious = {
                         if (state.currentPage == null && controller.currentPage > 0) {
                             controller.needBitmapAt(controller.currentPage - 1)
-                            callbacks.value.onPageWantToChange(controller.currentPage, false, true)
+                            callbacks.value.onTurnPageRequest(controller.currentPage, false, true)
                         } else {
-                            callbacks.value.onPageWantToChange(controller.currentPage, false, controller.currentPage > 0)
+                            callbacks.value.onTurnPageRequest(controller.currentPage, false, controller.currentPage > 0)
                         }
                     }
                 )

@@ -2,7 +2,6 @@ package ptq.mpga.pinance.widget
 
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.geometry.Offset
 
 interface PTQBookPageViewScope {
     /**
@@ -11,7 +10,7 @@ interface PTQBookPageViewScope {
      * @param isNextOrPrevious 用户想向前翻页还是向后翻页，true=next
      * @param success 用户翻页是否成功，处于最后一页还想向右翻则翻页失败，处于第一页向前翻同理
      */
-    fun onUserWantToChange(block: (currentPage: Int, isNextOrPrevious: Boolean, success: Boolean) -> Unit)
+    fun onTurnPageRequest(block: (currentPage: Int, isNextOrPrevious: Boolean, success: Boolean) -> Unit)
 
     /**
      * 页面的内容
@@ -21,7 +20,7 @@ interface PTQBookPageViewScope {
     fun contents(block: @Composable BoxScope.(currentPage: Int, refresh: () -> Unit) -> Unit)
 
     /**
-     * 自定义点击时的翻页行为（会影响页面呈现和[onUserWantToChange]回调）
+     * 自定义点击时的翻页行为（会影响页面呈现和[onTurnPageRequest]回调）
      *
      * 默认情况下：
      *
@@ -52,7 +51,7 @@ interface PTQBookPageViewScope {
     fun responseDragWhen(block: (rightDown: Point, startTouchPoint: Point, currentTouchPoint: Point) -> Boolean?)
 
     /**
-     * 自定义拖动松手时的翻页行为（会影响页面呈现和[onUserWantToChange]回调）
+     * 自定义拖动松手时的翻页行为（会影响页面呈现和[onTurnPageRequest]回调）
      *
      * 默认情况下：
      *

@@ -31,7 +31,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
-import ptq.mpga.pinance.R
 import ptq.mpga.pinance.ui.theme.PinanceTheme
 import ptq.mpga.pinance.widget.PTQBookPageView
 import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
@@ -70,7 +69,7 @@ class AlbumActivity : AppCompatActivity() {
                     val ctx = LocalContext.current
 
                     PTQBookPageView(state = state, config = config) {
-                        onUserWantToChange { currentPage, isNextOrPrevious, success ->
+                        onTurnPageRequest { currentPage, isNextOrPrevious, success ->
                             if (!success) {
                                 Toast.makeText(ctx, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
                             } else {
