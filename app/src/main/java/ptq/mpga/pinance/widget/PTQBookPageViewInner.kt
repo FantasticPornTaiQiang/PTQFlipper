@@ -5,7 +5,6 @@ import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -921,8 +920,6 @@ private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: Dr
         }
         else -> 0f
     }
-    
-//    Log.d(TAG, "onDragWhenTightState:${dragEvent.directionToOInCartesianSystem()} $res")
 
     return currentTheta + res
 }
@@ -1469,8 +1466,6 @@ data class Point(var x: Float, var y: Float) {
     internal fun toAbsoluteSystem() = Point(x, -y)
     //绝对系坐标转换为相对系坐标，y坐标相反
     internal fun toCartesianSystem() = Point(x, -y)
-
-    internal fun getKWith(a: Point) = (y - a.y) / (x - a.x)
 }
 
 private fun Point.getSymmetricalPointAbout(line: Line) = with(line) {
@@ -1572,19 +1567,6 @@ private fun Point.getExtensionPointInAbs(line: Line, d: Float): Point {
 
     val newX = x - d / (1 + line.k * line.k).pow(0.5f)
     return Point(newX, line.y(newX))
-}
-
-//角平分线
-private fun getAngularBisector(l1: Line, l2: Line, crossPoint: Point = l1.intersectAt(l2)): Pair<Line, Line> {
-    //偷个懒。
-    if (l1.k.isNaN() || l2.k.isNaN()) return Pair(Line.withTwoPoints(Point(0f, 0f), Point(0f, 0f)), Line.withTwoPoints(Point(0f, 0f), Point(0f, 0f)))
-
-    val u = (1 + l1.k * l1.k).pow(0.5f)
-    val v = (1 + l2.k * l2.k).pow(0.5f)
-
-    val k1 = (l2.k * v + l1.k * u) / (u + v)
-    val k2 = -1 / k1
-    return Pair(Line.withKAndOnePoint(k1, crossPoint), Line.withKAndOnePoint(k2, crossPoint))
 }
 
 private data class FloatRange(val start: Float, val end: Float) {
