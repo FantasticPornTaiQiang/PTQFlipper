@@ -8,6 +8,8 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 [源码解析] 还没写完
 
+[个人主页] [掘金](https://juejin.cn/user/800859313671719)
+
 <img src="screenshot/demo.gif" height="500">
 
 （DemoApk 中的图片均使用 AI 生成的图片）
@@ -22,19 +24,19 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 ```groovy
     allprojects {
-		repositories {
-			...
-			maven { url 'https://jitpack.io' }
-		}
-	}
+        repositories {
+            ...
+            maven { url 'https://jitpack.io' }
+        }
+    }
 ```
 
 2、在项目的 app 的 build.gradle 中添加依赖。
 
 ```groovy
     dependencies {
-	        implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:$latest_version'
-	}
+        implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:$latest_version'
+    }
 ```
 
 [最新版本](https://jitpack.io/#FantasticPornTaiQiang/PTQFlipper)
@@ -267,3 +269,5 @@ dragBehavior(block: (
   - 松手在 x<1/2 处则不翻页
 
 [示例代码](https://github.com/FantasticPornTaiQiang/PTQFlipper/blob/main/app/src/main/java/ptq/mpga/pinance/NovelActivity.kt)
+
+---
