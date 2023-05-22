@@ -4,6 +4,7 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
@@ -14,6 +15,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import ptq.mpga.pinance.ui.theme.PinanceTheme
@@ -59,7 +62,9 @@ class NovelActivity : AppCompatActivity() {
                         systemUiController.setNavigationBarColor(Color.Transparent)
                     }
 
-                    PTQView()
+                    Box(Modifier.fillMaxSize()) {
+                        PTQView()
+                    }
                 }
             }
         }
@@ -91,7 +96,7 @@ private data class Sticker(val id: Int, val resourceId: Int, val page: Int, val 
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun PTQView() {
+fun BoxScope.PTQView() {
     val screenH = LocalConfiguration.current.screenHeightDp.dp
     val screenW = LocalConfiguration.current.screenWidthDp.dp
 
@@ -110,146 +115,144 @@ fun PTQView() {
     PTQBookPageView(
         modifier = Modifier.padding(start = padding[0].dp, top = padding[1].dp, end = padding[2].dp, bottom = padding[3].dp),
         config = config,
-        state = state,
-        ptqBookPageViewScope = {
-            onTurnPageRequest { currentPage, isNextOrPrevious, success ->
-                if (!success) {
-                    Toast.makeText(ctx, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
-                } else {
-                    state = state.copy(currentPage = if (isNextOrPrevious) currentPage + 1 else currentPage - 1)
-                }
+        state = state) {
+        onTurnPageRequest { currentPage, isNextOrPrevious, success ->
+            if (!success) {
+                Toast.makeText(ctx, if (isNextOrPrevious) "已经是最后一页啦" else "已经是第一页啦", Toast.LENGTH_SHORT).show()
+            } else {
+                state = state.copy(currentPage = if (isNextOrPrevious) currentPage + 1 else currentPage - 1)
+            }
+        }
+
+        tapBehavior { leftUp, rightDown, touchPoint ->
+            val middle = (rightDown - leftUp).x / 2
+            return@tapBehavior touchPoint.x > middle
+        }
+
+        responseDragWhen { rightDown, startTouchPoint, currentTouchPoint ->
+            return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
+        }
+
+        dragBehavior { rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
+            val isFingerAtRight = lastTouchPoint.x > rightDown.x / 2
+
+            var isNext: Boolean? = null
+            if (isRightToLeftWhenStart && !isFingerAtRight) {
+                isNext = true
             }
 
-            tapBehavior { leftUp, rightDown, touchPoint ->
-                val middle = (rightDown - leftUp).x / 2
-                return@tapBehavior touchPoint.x > middle
+            if (!isRightToLeftWhenStart && isFingerAtRight) {
+                isNext = false
             }
 
-            responseDragWhen { rightDown, startTouchPoint, currentTouchPoint ->
-                return@responseDragWhen currentTouchPoint.x < startTouchPoint.x
-            }
+            return@dragBehavior Pair(!isFingerAtRight, isNext)
+        }
 
-            dragBehavior { rightDown, initialTouchPoint, lastTouchPoint, isRightToLeftWhenStart ->
-                val isFingerAtRight = lastTouchPoint.x > rightDown.x / 2
-
-                var isNext: Boolean? = null
-                if (isRightToLeftWhenStart && !isFingerAtRight) {
-                    isNext = true
-                }
-
-                if (!isRightToLeftWhenStart && isFingerAtRight) {
-                    isNext = false
-                }
-
-                return@dragBehavior Pair(!isFingerAtRight, isNext)
-            }
-
-            contents { currentPage, refresh ->
+        contents { currentPage, refresh ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(config.pageColor)
+            ) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(config.pageColor)
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(vertical = 18.dp)) {
-                        when(currentPage) {
-                            0 -> {
-                                Column {
-                                    Text(text1, lineHeight = 24.sp, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
-                                }
-                            }
-                            1 -> {
-                                Column {
-                                    Text(text2, lineHeight = 24.sp, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
-                                }
-                            }
-                            else -> {
-                                Text(
-                                    text = (currentPage + 1).toString(),
-                                    fontSize = 30.sp,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
+                        .padding(vertical = 18.dp)) {
+                    when(currentPage) {
+                        0 -> {
+                            Column {
+                                Text(text1, lineHeight = 24.sp, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
                             }
                         }
-                    }
-
-                    StickerView(stickers.filter {
-                        it.page == currentPage
-                    }, onOffsetChanged = { which, offset ->
-                        stickers[which] = stickers[which].copy(offset = offset)
-                    }, onStickerCreate = { resource ->
-                        stickers += Sticker(stickers.size, resource, currentPage, Offset(screenWidthPx / 2, screenHeightPx / 2), Size(screenWidthPx / 5, screenWidthPx / 5))
-                    }, onSizeChanged = { which, size ->
-                        stickers[which] = stickers[which].copy(size = size)
-                    })
-
-                    LazyRow(
-                        modifier = Modifier
-                            .padding(bottom = 40.dp)
-                            .background(color = Color.Gray.copy(alpha = 0.5f))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                            .align(Alignment.BottomCenter),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        item {
-                            Button(
-                                onClick = { (ctx as NovelActivity).onBackPressed() }, modifier = Modifier
-                                    .padding(end = 10.dp), shape = RoundedCornerShape(5.dp)
-                            ) {
-                                Text("返回")
+                        1 -> {
+                            Column {
+                                Text(text2, lineHeight = 24.sp, modifier = Modifier.padding(horizontal = 15.dp, vertical = 15.dp))
                             }
-                            Text(text = (currentPage + 1).toString() + " / " + state.pageCount, color = Color.White, fontWeight = FontWeight.Bold)
-                            Button(
-                                onClick = {
-                                    padding = if (!diySize) {
-                                        val Ox = Random.nextInt(0, (screenW * 0.2f).value.toInt()).toFloat()
-                                        val Oy = Random.nextInt(0, (screenH * 0.2f).value.toInt()).toFloat()
-                                        val Cx = Random.nextInt(0, (screenW * 0.2f).value.toInt()).toFloat()
-                                        val Cy = Random.nextInt(0, (screenH * 0.2f).value.toInt()).toFloat()
-                                        arrayOf(Ox, Oy, Cx, Cy)
-                                    } else {
-                                        arrayOf(0f, 0f, 0f, 0f)
-                                    }
-                                    diySize = !diySize
-                                }, modifier = Modifier.padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
-                            ) {
-                                Text(if (!diySize) "换个尺寸" else "还原")
-                            }
-                            Button(
-                                onClick = { config = config.copy(pageColor = pageColorList.random()) }, modifier = Modifier
-                                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
-                            ) {
-                                Text("换个底色")
-                            }
-                            Button(
-                                onClick = { state = state.copy(currentPage = (0 until state.pageCount).toMutableList().random()) }, modifier = Modifier
-                                    .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
-                            ) {
-                                Text("随机翻页")
-                            }
-                            Button(
-                                onClick = { config = config.copy(disabled = !config.disabled) }, modifier = Modifier
-                                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
-                            ) {
-                                Text(if (!config.disabled) "禁用翻页" else "启用翻页")
-                            }
-                            Button(
-                                onClick = { state = state.copy(pageCount = currentPage + (1..100).toMutableList().random()) }, modifier = Modifier
-                                    .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
-                            ) {
-                                Text("改变总页数")
-                            }
+                        }
+                        else -> {
+                            Text(
+                                text = (currentPage + 1).toString(),
+                                fontSize = 30.sp,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
                         }
                     }
                 }
 
-                refresh()
+                StickerView(stickers.filter {
+                    it.page == currentPage
+                }, onOffsetChanged = { which, offset ->
+                    stickers[which] = stickers[which].copy(offset = offset)
+                }, onStickerCreate = { resource ->
+                    stickers += Sticker(stickers.size, resource, currentPage, Offset(screenWidthPx / 2, screenHeightPx / 2), Size(screenWidthPx / 5, screenWidthPx / 5))
+                }, onSizeChanged = { which, size ->
+                    stickers[which] = stickers[which].copy(size = size)
+                })
             }
 
-        })
+            refresh()
+        }
+    }
+
+    LazyRow(
+        modifier = Modifier
+            .padding(bottom = 40.dp)
+            .background(color = Color.Gray.copy(alpha = 0.5f))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .align(Alignment.BottomCenter),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        item {
+            Button(
+                onClick = { (ctx as NovelActivity).onBackPressed() }, modifier = Modifier
+                    .padding(end = 10.dp), shape = RoundedCornerShape(5.dp)
+            ) {
+                Text("返回")
+            }
+            Text(text = (state.currentPage!! + 1).toString() + " / " + state.pageCount, color = Color.White, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = {
+                    padding = if (!diySize) {
+                        val Ox = Random.nextInt(0, (screenW * 0.2f).value.toInt()).toFloat()
+                        val Oy = Random.nextInt(0, (screenH * 0.2f).value.toInt()).toFloat()
+                        val Cx = Random.nextInt(0, (screenW * 0.2f).value.toInt()).toFloat()
+                        val Cy = Random.nextInt(0, (screenH * 0.2f).value.toInt()).toFloat()
+                        arrayOf(Ox, Oy, Cx, Cy)
+                    } else {
+                        arrayOf(0f, 0f, 0f, 0f)
+                    }
+                    diySize = !diySize
+                }, modifier = Modifier.padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+            ) {
+                Text(if (!diySize) "换个尺寸" else "还原")
+            }
+            Button(
+                onClick = { config = config.copy(pageColor = pageColorList.random()) }, modifier = Modifier
+                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+            ) {
+                Text("换个底色")
+            }
+            Button(
+                onClick = { state = state.copy(currentPage = (0 until state.pageCount).toMutableList().random()) }, modifier = Modifier
+                    .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
+            ) {
+                Text("随机翻页")
+            }
+            Button(
+                onClick = { config = config.copy(disabled = !config.disabled) }, modifier = Modifier
+                    .padding(start = 15.dp), shape = RoundedCornerShape(5.dp)
+            ) {
+                Text(if (!config.disabled) "禁用翻页" else "启用翻页")
+            }
+            Button(
+                onClick = { state = state.copy(pageCount = state.currentPage!! + (1..100).toMutableList().random()) }, modifier = Modifier
+                    .padding(start = 10.dp), shape = RoundedCornerShape(5.dp)
+            ) {
+                Text("改变总页数")
+            }
+        }
+    }
 }
 
 private const val stickerColumnCount = 4
@@ -318,17 +321,21 @@ private fun StickerView(currentPageStickers: List<Sticker>, onOffsetChanged: (In
 
     if (showDialog) {
         Dialog(onDismissRequest = {}) {
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(stickerList.size / stickerColumnCount) { index ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        for (j in 0 until stickerColumnCount) {
-                            val which = stickerList[index * stickerColumnCount + j]
-                            Image(painter = painterResource(id = which), contentDescription = null, modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    onStickerCreate(which)
-                                    showDialog = false
-                                })
+            Box(modifier = Modifier.fillMaxSize().clickable {
+                showDialog = false
+            }) {
+                LazyColumn(modifier = Modifier.fillMaxWidth().align(Alignment.Center)) {
+                    items(stickerList.size / stickerColumnCount) { index ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            for (j in 0 until stickerColumnCount) {
+                                val which = stickerList[index * stickerColumnCount + j]
+                                Image(painter = painterResource(id = which), contentDescription = null, modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        onStickerCreate(which)
+                                        showDialog = false
+                                    })
+                            }
                         }
                     }
                 }

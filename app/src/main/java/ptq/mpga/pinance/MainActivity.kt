@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -54,7 +55,6 @@ import kotlin.random.Random
 
 private const val TAG = "PTQBookPageMainActivity"
 
-
 class MainActivity : AppCompatActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -75,6 +75,8 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Image(painter = painterResource(id = R.drawable.ptq), contentDescription = null, contentScale = ContentScale.Crop, alpha = 0.05f, modifier = Modifier.fillMaxSize())
+
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("PTQBookPageView Demo", fontSize = 24.sp)
                             Spacer(modifier = Modifier.height(10.dp))

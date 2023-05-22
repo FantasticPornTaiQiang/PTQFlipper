@@ -921,8 +921,8 @@ private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: Dr
         }
         else -> 0f
     }
-
-    Log.d(TAG, "onDragWhenTightState:${dragEvent.directionToOInCartesianSystem()} $res")
+    
+//    Log.d(TAG, "onDragWhenTightState:${dragEvent.directionToOInCartesianSystem()} $res")
 
     return currentTheta + res
 }
@@ -951,6 +951,7 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
         val c = C.y * C.y - f * f - (C.x - q) * (C.x + q - 2 * E.x)
         val RyEquation = QuadraticEquationWithOneUnknown(a, b, c)
         val Ry = RyEquation.solve().run {
+//            Log.d(TAG, "getTightStateDeltaWhenBack1: ${this.joinToString()}")
             if (size < 2) return 0f else {
                 maxOf(this[0].absoluteValue, this[1].absoluteValue)
             }
@@ -966,6 +967,7 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
         val c = n * n + C.y * C.y - f * f - 2 * n * C.y - C.x * C.x + 2 * C.x * E.x
         val RxEquation = QuadraticEquationWithOneUnknown(a, b, c)
         val Rx = RxEquation.solve().run {
+//            Log.d(TAG, "getTightStateDeltaWhenBack2: ${this.joinToString()}")
             if (size < 2) return 0f else {
                 maxOf(this[0], this[1])
             }
@@ -977,7 +979,6 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
     val finalTheta = theta(-1 / finalK)
 
     if (finalTheta < minTheta) {
-        Log.d(TAG, "getTightStateDeltaWhenBack: min ${minTheta.toDeg()} cur ${finalTheta.toDeg()}")
         return 0f
     }
 
