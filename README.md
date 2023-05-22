@@ -1,4 +1,4 @@
-# PTQFlipper
+# PTQBookPageView
 
 Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动态内容。
 
@@ -7,6 +7,10 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 [项目仓库] [Github](https://github.com/FantasticPornTaiQiang/PTQFlipper)
 
 [源码解析] 还没写完
+
+<img src="screenshot/demo.gif" height="500">
+
+（DemoApk 中的图片均使用 AI 生成的图片）
 
 ---
 
@@ -29,9 +33,11 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 ```groovy
     dependencies {
-	        implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:Tag'
+	        implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:$latest_version'
 	}
 ```
+
+[最新版本](https://jitpack.io/#FantasticPornTaiQiang/PTQFlipper)
 
 ### 1.2 基本使用
 
