@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import ptq.mpga.pinance.ui.theme.PinanceTheme
+import ptq.mpga.ptqbookpageview.widget.PTQBookPageView
+import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewState
 
 private const val TAG = "PTQBookPageMainActivity"
 
