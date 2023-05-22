@@ -33,7 +33,7 @@ private const val TAG = "PTQBookPageViewInner"
 
 //带ratio的要乘屏幕比例
 private const val stateTightMinWERatio = 1 / 8f //进入tight状态的最小WE长度
-private const val minTheta = ((137f * PI) / 180).toFloat() //最小θ，弧度制
+private const val minTheta = ((137 * PI) / 180).toFloat() //最小θ，弧度制
 private const val stateTightDragUpThetaRate = 0.1f //tight状态向上拉扯的速率，该值越大则拉扯越快
 private const val stateTightDragRightScreenDistanceRatio = 1 / 40f //tight状态手指移到屏幕右侧多少时到达最终态
 private const val maxDragXRatio = stateTightDragRightScreenDistanceRatio //手指最大X，和上个变量一样
@@ -944,19 +944,16 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
     val C = Point(screenWidth, -screenHeight)
     val W = Point(minWxRatio * screenWidth, C.y)
     val E = Point(W.x + stateTightMinWERatio * C.x, C.y)
-    val Rc = if (dragEvent.dragDelta.x == 0f) {
+    val possibleRc = if (dragEvent.dragDelta.x == 0f) {
         val q = dragEvent.currentTouchPoint.x
         val a = 1f
         val b = -2 * C.y
         val c = C.y * C.y - f * f - (C.x - q) * (C.x + q - 2 * E.x)
         val RyEquation = QuadraticEquationWithOneUnknown(a, b, c)
-        val Ry = RyEquation.solve().run {
-//            Log.d(TAG, "getTightStateDeltaWhenBack1: ${this.joinToString()}")
-            if (size < 2) return 0f else {
-                maxOf(this[0].absoluteValue, this[1].absoluteValue)
-            }
+        val possibleRy = RyEquation.solve().also {
+            if (it.isEmpty()) return 0f
         }
-        Point(q, Ry)
+        arrayOf(Point(q, possibleRy[0]), Point(q, possibleRy[1]))
     } else {
         val touchLine = Line.withKAndOnePoint(-dragEvent.dragDelta.y / dragEvent.dragDelta.x, dragEvent.currentTouchPoint.toCartesianSystem())
         val m = touchLine.k
@@ -966,26 +963,25 @@ private fun getTightStateDeltaWhenBack(f: Float, currentTheta: Float, dragEvent:
         val b = 2 * (m * n - m * C.y - E.x)
         val c = n * n + C.y * C.y - f * f - 2 * n * C.y - C.x * C.x + 2 * C.x * E.x
         val RxEquation = QuadraticEquationWithOneUnknown(a, b, c)
-        val Rx = RxEquation.solve().run {
-//            Log.d(TAG, "getTightStateDeltaWhenBack2: ${this.joinToString()}")
-            if (size < 2) return 0f else {
-                maxOf(this[0], this[1])
-            }
+        val possibleRx = RxEquation.solve().also {
+            if (it.isEmpty()) return 0f
         }
-        Point(Rx, m * Rx + n)
+        arrayOf(Point(possibleRx[0], m * possibleRx[0] + n), Point(possibleRx[1], m * possibleRx[1] + n))
     }
 
-    val finalK = (Rc.y - C.y + f) / (Rc.x + C.x - 2 * E.x)
-    val finalTheta = theta(-1 / finalK)
-
-    if (finalTheta < minTheta) {
-        return 0f
-    }
+    val finalThetaRange = minTheta..PI.toFloat()
+    var finalTheta = 0f
+    val finalRc = possibleRc.firstOrNull {
+        val kEF = (it.y - C.y + f) / (it.x + C.x - 2 * E.x)
+        val theta = theta(-1 / kEF)
+        finalTheta = theta
+        finalThetaRange.contains(theta) && (0f..screenWidth).contains(it.x) && (-screenHeight..0f).contains(it.y)
+    } ?: return 0f
 
     val thetaRange = FloatRange(minOf(currentTheta, finalTheta), finalTheta)
 
     val originTouchPoint = dragEvent.originTouchPoint.toCartesianSystem()
-    val fingerRange = FloatRange(0f, originTouchPoint.distanceTo(Rc))
+    val fingerRange = FloatRange(0f, originTouchPoint.distanceTo(finalRc))
 
     val newFingerValue = dragEvent.currentTouchPoint.toCartesianSystem().distanceTo(originTouchPoint)
     val newTheta = fingerRange.linearMappingWithConstraints(newFingerValue, thetaRange).run { thetaRange.constraints(this) }
