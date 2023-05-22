@@ -6,7 +6,6 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,9 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import ptq.mpga.pinance.ui.theme.PinanceTheme
-import ptq.mpga.pinance.widget.PTQBookPageView
-import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
-import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
+import ptq.mpga.ptqbookpageview.widget.PTQBookPageView
+import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewConfig
+import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewState
 
 private val albumList = arrayOf(
     R.drawable.album1,
@@ -47,7 +46,6 @@ private val albumList = arrayOf(
 )
 
 class AlbumActivity : AppCompatActivity() {
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -97,7 +95,7 @@ class AlbumActivity : AppCompatActivity() {
                                 ) {
                                     item {
                                         Button(
-                                            onClick = { onBackPressed() }, modifier = Modifier
+                                            onClick = { finish() }, modifier = Modifier
                                                 .padding(end = 10.dp), shape = RoundedCornerShape(5.dp)
                                         ) {
                                             Text("返回")

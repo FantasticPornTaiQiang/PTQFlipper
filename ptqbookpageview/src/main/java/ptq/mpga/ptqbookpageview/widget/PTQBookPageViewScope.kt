@@ -1,4 +1,4 @@
-package ptq.mpga.pinance.widget
+package ptq.mpga.ptqbookpageview.widget
 
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable

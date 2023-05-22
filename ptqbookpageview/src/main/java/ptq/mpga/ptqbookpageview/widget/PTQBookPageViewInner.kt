@@ -1,11 +1,8 @@
-package ptq.mpga.pinance.widget
+package ptq.mpga.ptqbookpageview.widget
 
-import android.graphics.*
 import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -17,15 +14,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
-import ptq.mpga.pinance.widget.Line.Companion.k
-import ptq.mpga.pinance.widget.Line.Companion.theta
+import ptq.mpga.ptqbookpageview.widget.Line.Companion.k
+import ptq.mpga.ptqbookpageview.widget.Line.Companion.theta
 import kotlin.math.*
 
 private const val TAG = "PTQBookPageViewInner"
@@ -78,10 +78,9 @@ private enum class State {
  * @param onNext 企图下一页时调用（当处于最后一页仍想翻下一页也会触发onNext）
  * @param onPrevious 企图上一页时调用（当处于第一页仍想翻下一页也会触发onPrevious）
  */
-@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 internal fun PTQBookPageViewInner(
-    bounds: Rect,
+    bounds: androidx.compose.ui.geometry.Rect,
     controller: PTQBookPageBitmapController,
     callbacks: PTQBookPageViewScopeImpl,
     onNext: () -> Unit = {},
@@ -907,11 +906,9 @@ private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: Dr
         DragDirection.Up -> {
             getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
         }
-        //左下、下、左、左上、右下
         DragDirection.LeftDown, DragDirection.Down, DragDirection.Left, DragDirection.LeftUp, DragDirection.RightDown -> {
             getTightStateDeltaWhenBack(f, currentTheta, absDragEvent, screenWidth, screenHeight)
         }
-        //右上
         DragDirection.RightUp -> {
             val deltaRight = getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
             val deltaUp = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)

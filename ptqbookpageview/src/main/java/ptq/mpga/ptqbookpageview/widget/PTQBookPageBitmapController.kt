@@ -1,10 +1,7 @@
-package ptq.mpga.pinance.widget
+package ptq.mpga.ptqbookpageview.widget
 
 import android.graphics.Bitmap
-import android.util.Log
 import androidx.annotation.IntRange
-import androidx.compose.runtime.Composable
-import kotlin.math.log
 
 private const val TAG = "PTQBookPageBitmapController"
 
@@ -13,7 +10,7 @@ private const val TAG = "PTQBookPageBitmapController"
  *
  * 使用SideEffect监听重组，如果重组发生，则重画当前三页
  */
-internal class PTQBookPageBitmapController(@IntRange(from = 1) var totalPage: Int) {
+internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: Int) {
 
     //记录前一页，当前页，后一页，如果current==0，则bitmapBuffer[0]为null。current==total同理
     private val bitmapBuffer = arrayOfNulls<Bitmap?>(3)

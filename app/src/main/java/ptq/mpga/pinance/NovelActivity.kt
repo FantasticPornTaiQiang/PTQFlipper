@@ -4,7 +4,6 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
@@ -15,7 +14,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
@@ -33,19 +31,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import ptq.mpga.pinance.ui.theme.PinanceTheme
-import ptq.mpga.pinance.widget.PTQBookPageView
-import ptq.mpga.pinance.widget.rememberPTQBookPageViewConfig
-import ptq.mpga.pinance.widget.rememberPTQBookPageViewState
+import ptq.mpga.ptqbookpageview.widget.PTQBookPageView
+import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewConfig
+import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewState
 import kotlin.random.Random
 
 private const val TAG = "PTQBookNovelActivity"
 
 class NovelActivity : AppCompatActivity() {
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -205,7 +201,7 @@ fun BoxScope.PTQView() {
     ) {
         item {
             Button(
-                onClick = { (ctx as NovelActivity).onBackPressed() }, modifier = Modifier
+                onClick = { (ctx as NovelActivity).finish() }, modifier = Modifier
                     .padding(end = 10.dp), shape = RoundedCornerShape(5.dp)
             ) {
                 Text("返回")

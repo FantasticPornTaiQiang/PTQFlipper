@@ -1,4 +1,4 @@
-package ptq.mpga.pinance.widget
+package ptq.mpga.ptqbookpageview.widget
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -51,7 +51,6 @@ internal class PTQBookPageViewScopeImpl : PTQBookPageViewScope {
  * @param state 组件状态，请使用[rememberPTQBookPageViewState]
  * @param ptqBookPageViewScope 翻页器提供的各类回调 [PTQBookPageViewScope]
  */
-@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun PTQBookPageView(
     modifier: Modifier = Modifier, config: PTQBookPageViewConfig = PTQBookPageViewConfig(), state: PTQBookPageViewState, ptqBookPageViewScope: PTQBookPageViewScope.() -> Unit

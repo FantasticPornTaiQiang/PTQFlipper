@@ -1,9 +1,8 @@
-package ptq.mpga.pinance.widget
+package ptq.mpga.ptqbookpageview.widget
 
-import androidx.annotation.IntRange
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
-import kotlin.reflect.KProperty
+import androidx.annotation.IntRange
 
 data class PTQBookPageViewState(@IntRange(from = 1L) val pageCount: Int, @IntRange(from = 0L) val currentPage: Int? = null) {
     init {
