@@ -2,29 +2,35 @@ package ptq.mpga.pinance
 
 import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import ptq.mpga.pinance.ui.theme.PinanceTheme
-import ptq.mpga.ptqbookpageview.widget.PTQBookPageView
-import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewState
 
 private const val TAG = "PTQBookPageMainActivity"
 
@@ -49,7 +55,6 @@ class MainActivity : AppCompatActivity() {
 
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         var clickCount by remember { mutableStateOf(0) }
-//                        Image(painter = painterResource(id = R.drawable.ptq), contentDescription = null, contentScale = ContentScale.Crop, alpha = 0.05f, modifier = Modifier.fillMaxSize())
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("PTQBookPageView Demo", fontSize = 24.sp, modifier = Modifier.clickable {
