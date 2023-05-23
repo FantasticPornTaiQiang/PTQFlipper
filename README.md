@@ -2,7 +2,7 @@
 
 Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动态内容。
 
-[效果演示] [DemoApk](https://github.com/FantasticPornTaiQiang/PTQFlipper/files/11531367/PTQBookPageViewDemoApp.zip)
+[效果演示] [DemoApk](https://github.com/FantasticPornTaiQiang/PTQFlipper/blob/main/app/release/PTQBookPageViewDemoApp.zip)
 
 [项目仓库] [Github](https://github.com/FantasticPornTaiQiang/PTQFlipper)
 
