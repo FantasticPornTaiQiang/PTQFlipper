@@ -4,9 +4,10 @@ buildscript {
         compose_version = '1.4.3'
     }
     repositories {
+        maven { url "https://jitpack.io" }
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
+
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:7.4.2'
