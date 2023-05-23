@@ -58,7 +58,7 @@ afterEvaluate {
         publications {
             release(MavenPublication) {
                 from components.release
-                groupId = 'com.github.ptq'
+                groupId = 'ptq.mpga'
                 artifactId = 'ptqbookpageview'
                 version = '1.0.0'
             }
