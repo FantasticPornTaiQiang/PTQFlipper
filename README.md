@@ -6,9 +6,11 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 [项目仓库] [Github](https://github.com/FantasticPornTaiQiang/PTQFlipper)
 
-[源码解析] 还没写完
+[组件使用] [传送门](https://juejin.cn/post/7236281103221375033)
 
-[个人主页] [掘金](https://juejin.cn/user/800859313671719)
+[设计思路] [传送门](https://juejin.cn/post/7236636296876818491)
+
+[源码解析] 还没写完
 
 <img src="screenshot/demo.gif" height="500">
 
