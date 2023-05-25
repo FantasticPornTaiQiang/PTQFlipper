@@ -3,6 +3,7 @@ package ptq.mpga.ptqbookpageview.widget
 import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -903,10 +904,10 @@ private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: Dr
         DragDirection.Right -> {
             getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
         }
-        DragDirection.Up -> {
+        DragDirection.Up, DragDirection.LeftUp -> {
             getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
         }
-        DragDirection.LeftDown, DragDirection.Down, DragDirection.Left, DragDirection.LeftUp, DragDirection.RightDown -> {
+        DragDirection.LeftDown, DragDirection.Down, DragDirection.Left, DragDirection.RightDown -> {
             getTightStateDeltaWhenBack(f, currentTheta, absDragEvent, screenWidth, screenHeight)
         }
         DragDirection.RightUp -> {
