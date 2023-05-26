@@ -18,7 +18,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.PaintingStyle
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -45,7 +47,7 @@ private const val animExitDuration = animEnterDuration //出动画时间
 
 private const val tapYDeltaRatio = 1 / 170f //点击翻页时，y方向偏移，不宜过大
 
-private const val shadowThreshold = 25f //阴影1、2阈值
+private const val shadowThreshold = 22f //阴影1、2阈值
 private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
 private const val shadow3VerticalThreshold = 30 //处理当接近垂直时，底层绘制api不正常工作的问题
 
@@ -81,7 +83,7 @@ private enum class State {
  */
 @Composable
 internal fun PTQBookPageViewInner(
-    bounds: androidx.compose.ui.geometry.Rect,
+    bounds: Rect,
     controller: PTQBookPageBitmapController,
     callbacks: PTQBookPageViewScopeImpl,
     onNext: () -> Unit = {},
@@ -584,7 +586,7 @@ internal fun PTQBookPageViewInner(
                     //画当前页
                     frameworkPaint.shader = null
                     frameworkPaint.color = nativePageColor
-                    it.drawPath(paths[0], paint)
+//                    it.drawPath(paths[0], paint)
                     nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
 
                     //画阴影区域1
@@ -644,9 +646,16 @@ internal fun PTQBookPageViewInner(
                         Shader.TileMode.CLAMP
                     )
                     it.drawPath(shadowPaths[5], paint)
+
+                    //加强一下轮廓
+                    paint.shader = null
+                    paint.color = shadow12Color.copy(alpha = 0.14f)
+                    paint.style = PaintingStyle.Stroke
+                    paint.strokeWidth = 1.8f
+                    it.drawPath(paths[3], paint)
+
+                    it.clipRect(Rect(Offset.Zero, Offset(viewWidth, viewHeight)))
                 }
-                //加强一下轮廓
-                drawPath(paths[3], shadow12Color.copy(alpha = 0.14f), style = Stroke(width = 1.8f))
             })
         }
     }
