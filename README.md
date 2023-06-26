@@ -118,7 +118,7 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 `rememberPTQBookPageViewConfig(pageColor: Color = Color.White, disabled: Boolean = false)`
 
-- pageColor **当前页背面**的颜色（页面正面的颜色在 contents 的 Box 的 background modifier 中设置）
+- pageColor **当前页背面**的颜色（页面正面的颜色在 contents 的 Box 的 background modifier 中设置）（暂不支持页面透明度的设置，即alpha通道必须为ff）
 
 - disabled 整个组件是否禁用（若想单独禁用单击或拖动手势，请看[高级定制](#3-高级定制)）
 
