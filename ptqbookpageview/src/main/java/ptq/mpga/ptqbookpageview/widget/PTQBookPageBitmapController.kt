@@ -5,12 +5,15 @@ import androidx.annotation.IntRange
 
 private const val TAG = "PTQBookPageBitmapController"
 
+private val BITMAP_COLOR_CONFIG = Bitmap.Config.RGB_565
+
 /**
  * 处于当前页时，需要已经绘制好当前页、前一页和后一页的Bitmap，如果在第一页，则不画前一页，在最后同理
  *
  * 使用SideEffect监听重组，如果重组发生，则重画当前三页
  */
 internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: Int) {
+
 
     //记录前一页，当前页，后一页，如果current==0，则bitmapBuffer[0]为null。current==total同理
     private val bitmapBuffer = arrayOfNulls<Bitmap?>(3)
@@ -63,28 +66,75 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
         return needBitmapPages.first().first
     }
 
-    fun saveRenderedBitmap(bitmap: Bitmap) {
-        if (needBitmapPages.isEmpty()) {
-            bitmap.recycle()
+    fun renderThenSave(width: Int, height: Int, render: (usable: Bitmap) -> Unit) {
+        //如果不再需要bitmap，则不再绘制了
+        if (needBitmapPages.isEmpty() || width == 0 || height == 0) {
             return
         }
 
         val first = needBitmapPages.first()
 
-        needBitmapPages.removeAt(0)
-        bitmapBuffer[first.second]?.recycle()
-        bitmapBuffer[first.second] = bitmap
+        val reuseCandidate = bitmapBuffer[first.second]
 
+        //RGB_565每像素2字节
+        if (reuseCandidate == null || width * height * 2 > reuseCandidate.allocationByteCount) {
+            reuseCandidate?.recycle()
+            bitmapBuffer[first.second] = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        } else {
+            bitmapBuffer[first.second]?.let {
+                if (width != it.width || height != it.height) {
+                    it.reconfigure(width, height, it.config)
+                }
+            }
+        }
+
+        render(bitmapBuffer[first.second]!!)
+
+        needBitmapPages.removeFirst()
         if (needBitmapPages.isEmpty()) return
         exeRecompositionBlock?.let { it() }
     }
 
+//    fun obtainBitmap(width: Int, height: Int): Bitmap? {
+//        //如果不再需要bitmap，则不再绘制了
+//        if (needBitmapPages.isEmpty()) {
+//            return null
+//        }
+//
+//        val first = needBitmapPages.first()
+//
+//        val reuseCandidate = bitmapBuffer[first.second] ?: return Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+//
+//        return if (!canReuseBitmap(reuseCandidate, width, height)) {
+//            Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+//        } else {
+//            reuseCandidate.
+//        }
+//    }
+
+//    fun saveRenderedBitmap(bitmap: Bitmap) {
+//        if (needBitmapPages.isEmpty()) {
+//            bitmap.recycle()
+//            return
+//        }
+//
+//        val first = needBitmapPages.first()
+//
+//        needBitmapPages.removeAt(0)
+//        bitmapBuffer[first.second]?.recycle()
+//        bitmapBuffer[first.second] = bitmap
+//
+//        if (needBitmapPages.isEmpty()) return
+//        exeRecompositionBlock?.let { it() }
+//    }
+
     /**
-     * @param 0=前一张 1=当前 2=下一张
+     * 获取当前Bitmap
+     * @param which 0=前一张 1=当前 2=下一张
      */
     fun getBitmapCurrent(which: Int): Bitmap {
         if (bitmapBuffer[which] == null) {
-            bitmapBuffer[which] = Bitmap.createBitmap(1, 1, Bitmap.Config.RGB_565)
+            bitmapBuffer[which] = Bitmap.createBitmap(1, 1, BITMAP_COLOR_CONFIG)
         }
         return bitmapBuffer[which]!!
     }

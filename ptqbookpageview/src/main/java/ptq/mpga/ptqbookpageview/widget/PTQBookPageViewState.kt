@@ -41,4 +41,4 @@ data class PTQBookPageViewConfig(
     val disabled: Boolean = false,
 )
 
-val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }
+internal val LocalPTQBookPageViewConfig = compositionLocalOf<PTQBookPageViewConfig> { error("Local flipper config error") }

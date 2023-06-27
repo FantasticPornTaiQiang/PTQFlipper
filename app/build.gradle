@@ -40,6 +40,7 @@ android {
         kotlinCompilerExtensionVersion compose_version
     }
     packagingOptions {
+        pickFirst 'lib/*/libshadowhook.so'
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
@@ -65,4 +66,5 @@ dependencies {
     implementation "com.google.accompanist:accompanist-insets:0.15.0"
 //    implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:1.0.0'
     implementation project(':ptqbookpageview')
+    implementation 'io.github.shixinzhang:android-bitmap-monitor:1.1.0'
 }
