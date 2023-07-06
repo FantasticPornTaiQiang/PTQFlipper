@@ -14,6 +14,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.EmptyCoroutineContext
 
 private const val TAG = "PTQBookPageView"
 
@@ -62,6 +64,12 @@ fun PTQBookPageView(
             mutableStateOf(PTQBookPageBitmapController(state.pageCount))
         }
 
+        DisposableEffect(Unit) {
+            onDispose {
+                controller.destroy()
+            }
+        }
+
         remember(state) {
             controller.totalPage = state.pageCount
             state.currentPage?.let {
@@ -97,18 +105,12 @@ fun PTQBookPageView(
                     }
 
                     override fun dispatchDraw(canvas: Canvas?) {
-//                        if (width == 0 || height == 0) return
-//                        val source = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-//                        val canvas2 = Canvas(source)
-//                        super.dispatchDraw(canvas2)
-//                        canvas2.setBitmap(null)
-//                        controller.saveRenderedBitmap(source)
-
-                        controller.renderThenSave(width, height) { bitmap ->
-                            Canvas(bitmap).also {
-                                super.dispatchDraw(it)
-                                it.setBitmap(null)
-                            }
+                        /**
+                         * 复用canvas、bitmap，且把流程控制在BitmapController内部，dispatchDraw只负责dispatchDraw
+                         * @since v1.1.0
+                         */
+                        controller.renderThenSave(width, height) {
+                            super.dispatchDraw(it)
                         }
                     }
                 }

@@ -6,6 +6,7 @@ plugins {
 
 android {
     compileSdk 33
+    ndkVersion '25.2.9519653'
 
     defaultConfig {
         minSdk 26
@@ -39,6 +40,11 @@ android {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
 }
 
 dependencies {
@@ -60,7 +66,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'ptq.mpga'
                 artifactId = 'ptqbookpageview'
-                version = '1.0.0'
+                version = '1.1.0'
             }
         }
     }

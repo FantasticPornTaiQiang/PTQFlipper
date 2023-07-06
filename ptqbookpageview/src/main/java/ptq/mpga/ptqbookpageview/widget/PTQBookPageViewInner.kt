@@ -4,32 +4,42 @@ import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.util.Log
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.TweenSpec
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.PaintingStyle
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import ptq.mpga.ptqbookpageview.widget.Line.Companion.k
 import ptq.mpga.ptqbookpageview.widget.Line.Companion.theta
-import kotlin.math.*
+import kotlin.math.PI
+import kotlin.math.absoluteValue
+import kotlin.math.atan
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 
 private const val TAG = "PTQBookPageViewInner"
 
@@ -47,7 +57,7 @@ private const val animExitDuration = animEnterDuration //出动画时间
 
 private const val tapYDeltaRatio = 1 / 170f //点击翻页时，y方向偏移，不宜过大
 
-private const val shadowThreshold = 22f //阴影1、2阈值
+private const val shadowThreshold = 26f //阴影1、2阈值
 private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
 private const val shadow3VerticalThreshold = 30 //处理当接近垂直时，底层绘制api不正常工作的问题
 
@@ -60,10 +70,11 @@ private const val lustreStartMaxDistance = 9f //光泽右侧最大距离
 private const val lustreStartMinDistance = 6f //光泽右侧最小距离，即当WEmin时的距离
 private const val lustreEndMaxDistance = 9f //光泽左侧最大距离
 private const val lustreEndMinDistance = 6f //光泽左侧最小距离，即当WEmin时的距离
-private const val lustreEndShadowMaxWidth = 24f //光泽左侧阴影最大宽度
-private const val lustreEndShadowMinWidth = 16f //光泽左侧阴影最小宽度，即当WEmin时的宽度
+private const val lustreEndShadowMaxWidth = 30f //光泽左侧阴影最大宽度
+private const val lustreEndShadowMinWidth = 20f //光泽左侧阴影最小宽度，即当WEmin时的宽度
 
-private const val distortionInterval = 16 //扭曲的间隔
+private const val distortionInterval = 30 //扭曲的间隔
+private const val bezierEdgeDownSampling = 45 //NVJ、ZTN等贝塞尔曲线边的下采样值
 
 private enum class PageState {
     Loose, WMin, ThetaMin, Tight
@@ -100,9 +111,15 @@ internal fun PTQBookPageViewInner(
     val bitmapMeshCount by remember(bounds) {
         mutableStateOf(
             Pair(
-                (viewWidth / distortionInterval).toInt(),
-                (viewHeight / distortionInterval).toInt()
+                ((viewWidth / 1200) * viewWidth / distortionInterval).toInt(), //对比720*1200的手机乘一个比例
+                ((viewHeight / 720) * viewHeight / distortionInterval).toInt(),
             )
+        )
+    }
+    //connect时的下采样数
+    val distortedEdgeDownSampling by remember(bounds) {
+        mutableStateOf(
+            (viewHeight * viewWidth * bezierEdgeDownSampling / 1200 / 720).toInt()
         )
     }
 
@@ -110,7 +127,7 @@ internal fun PTQBookPageViewInner(
     val dragXRange by remember(bounds) { mutableStateOf(FloatRange(0f, viewWidth * (1 - maxDragXRatio))) }
 
     //组件左上角
-    val absO by remember { mutableStateOf(Point(0f, 0f)) }
+    val absO by remember { mutableStateOf(Point.Zero) }
     //Tap回调中的组件左上角
     val leftUpOnTap by remember(bounds) { mutableStateOf(Point(0f, tapYDeltaRatio * viewHeight)) }
     //组件右下角
@@ -125,6 +142,23 @@ internal fun PTQBookPageViewInner(
     var pageState by remember { mutableStateOf(PageState.Loose) }
     //要绘制的所有点，绝对系
     var allPoints by remember { mutableStateOf(AllPoints.default(absO)) }
+    //要绘制的Path，采用remember缓存，而没有使用drawWithCache
+    val pathResult by remember {
+        mutableStateOf(
+            PathResult(
+                listOf(Path(), Path()),
+                listOf(Path(), Path(), Path(), Path(), Path(), Path()),
+                mutableListOf(
+                    Pair(Point.Zero, Point.Zero),
+                    Pair(Point.Zero, Point.Zero),
+                    Pair(Point.Zero, Point.Zero),
+                    Pair(Point.Zero, Point.Zero),
+                    Pair(Point.Zero, Point.Zero),
+                ),
+                1f
+            )
+        )
+    }
     //当前翻转状态
     var upsideDown by remember { mutableStateOf(false) }
 
@@ -132,10 +166,17 @@ internal fun PTQBookPageViewInner(
      * 点击和拖动时起手是右往左还是左往右（受[PTQBookPageViewScope.tapBehavior]和[PTQBookPageViewScope.dragBehavior]控制）
      */
     var isRightToLeftWhenStart by remember { mutableStateOf(true) }
+    /**
+     * 当页面Bitmap没有发生变化时，绘制的backgroundBitmap也可能不一样，因为分左起手还是右起手，所以需要一个变量记录上次是左还是右，以保证synthesizedBitmap缓存正常
+     * @since v1.1.0
+     */
+    var isRightToLeftWhenStartLast by remember { mutableStateOf(true) }
+
     //有可能onDrag中没有进入开始动画（除第一页最后一页的情况外）（例如手指的触摸时间很短），这时自然不应该响应onDragEnd，因此这个变量保证开始动画一定执行了（换句话说，保证onDragEnd中，state=State.Idle的触发条件只有第一页和最后一页的情况
     var turnPageRequestWhenDrag by remember { mutableStateOf(false) }
     //应该是下一页还是上一页，因为要等动画结束才能算完全翻完页，所以回调要在动画结束之后，因此需要一个变量记录一下状态
     var isNextOrPrevious by remember { mutableStateOf<Boolean?>(null) }
+
     /**
      * 拖动起始点（起始动画之前，用户的最开始触摸点），用于[PTQBookPageViewScope.dragBehavior]
      */
@@ -219,6 +260,7 @@ internal fun PTQBookPageViewInner(
             State.EnterAnimStart -> {
                 state = if (exitPreStartState) State.ExitAnimPreStart else State.Draggable
             }
+
             State.ExitAnimStart -> {
                 //所有流程的最后，所有状态重置
                 curDragEvent = DragEvent(absO.copy(), absO.copy())
@@ -238,11 +280,14 @@ internal fun PTQBookPageViewInner(
                 interruptedInDrag = false
                 dragInitialPoint = absO.copy()
                 turnPageRequestWhenDrag = false
+                isRightToLeftWhenStartLast = isRightToLeftWhenStart
             }
+
             State.ExitAnimPreStart -> { //确保animFloatRatio回到0f
                 exeExitAnim.value()
             }
-            else -> { }
+
+            else -> {}
         }
     }, animationSpec = TweenSpec(easing = LinearEasing, durationMillis = if (state == State.EnterAnimStart) animDuration[0] else if (state == State.ExitAnimStart) animDuration[1] else 0))
 
@@ -286,6 +331,7 @@ internal fun PTQBookPageViewInner(
                 turnPageRequestWhenDrag = false
                 isNextOrPrevious = null
             }
+
             else -> {}
         }
     }
@@ -348,6 +394,10 @@ internal fun PTQBookPageViewInner(
 
                     isRightToLeftWhenStart = !isLeftToRight
                     isNextOrPrevious = !isLeftToRight
+                    if (isRightToLeftWhenStartLast != isRightToLeftWhenStart) {
+                        //since v1.1.0 上一次和这一次起手不一样则清空synthesizedBitmap缓存
+                        controller.bitmapSynthesizer.clearSynthesizedCache()
+                    }
                 }
             }
         }
@@ -412,6 +462,10 @@ internal fun PTQBookPageViewInner(
                             }
 
                             isRightToLeftWhenStart = isRightToLeft
+                            if (isRightToLeftWhenStartLast != isRightToLeftWhenStart) {
+                                //since v1.1.0 上一次和这一次起手不一样则清空synthesizedBitmap缓存
+                                controller.bitmapSynthesizer.clearSynthesizedCache()
+                            }
 
                             //如果是第一页或者最后一页，直接return，之后松手就会触发onDragEnd，且state=State.Idle
                             if ((isRightToLeft && controller.currentPage >= controller.totalPage - 1) ||
@@ -457,7 +511,7 @@ internal fun PTQBookPageViewInner(
                 }
             )
         }
-        .background(color = pageColor)
+        .background(color = Color.Transparent)
     ) {
         if (state == State.Idle) {
             callbacks.contents(this, controller.currentPage) {}
@@ -470,9 +524,11 @@ internal fun PTQBookPageViewInner(
                     animLastPoint = curPoint
                     animDragEvent
                 }
+
                 State.Draggable -> {
                     curDragEvent
                 }
+
                 else -> {
                     null
                 }
@@ -499,18 +555,21 @@ internal fun PTQBookPageViewInner(
                             newTheta?.let { theta = it }
                         }
                     }
+
                     PageState.WMin -> {
                         buildStateWMin(absO.copy(), _dragEvent, Point(viewWidth, viewHeight), f) { newState, newTheta ->
                             theta = newTheta
                             pageState = newState
                         }
                     }
+
                     PageState.ThetaMin -> {
                         buildStateThetaMin(absO.copy(), _dragEvent, Point(viewWidth, viewHeight), f) { newState, newTheta ->
                             theta = newTheta
                             pageState = newState
                         }
                     }
+
                     PageState.Tight -> {
                         buildStateTight(absO.copy(), Point(viewWidth, viewHeight), theta, _dragEvent, f) { newState ->
                             pageState = newState
@@ -549,10 +608,13 @@ internal fun PTQBookPageViewInner(
                 }
             }
 
-            val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = upsideDownAllPoints.buildPath(distortedEdges, upsideDown)
+            upsideDownAllPoints.buildPath(distortedEdges, upsideDown, distortedEdgeDownSampling, pathResult)
+            val (paths, shadowPaths, shaderControlPointPairs, shadow12Width) = pathResult
 
-            Canvas(modifier = Modifier.fillMaxSize(), onDraw = {
+            Canvas(modifier = Modifier.fillMaxSize()) {
                 drawIntoCanvas {
+                    val start = System.currentTimeMillis()
+
                     val paint = Paint()
                     val frameworkPaint = paint.asFrameworkPaint()
                     paint.isAntiAlias = true
@@ -566,28 +628,73 @@ internal fun PTQBookPageViewInner(
                         return@drawIntoCanvas
                     }
 
-                    //画下一页
-                    nativeCanvas.drawBitmap(backgroundBitmap, absO.x, absO.y, frameworkPaint)
-
-                    //画阴影区域3
-                    frameworkPaint.shader =
-                        LinearGradient(
-                            shaderControlPointPairs[2].first.x,
-                            shaderControlPointPairs[2].first.y,
-                            shaderControlPointPairs[2].second.x,
-                            shaderControlPointPairs[2].second.y,
-                            nativeShadow3Color,
-                            nativeTransparentColor,
-                            Shader.TileMode.CLAMP
-                        )
-                    it.drawPath(shadowPaths[2], paint)
-                    it.clipPath(paths[2], ClipOp.Difference)
-
                     //画当前页
+                    /**
+                     * @since v1.1.0
+                     * 从前的做法是先画底图后画drawBitmapMesh，但drawBitmapMesh方法可能会有闪动，即在底图区域有闪动，因此采用了clip的方式，但clip会导致耗时增加
+                     * 因此优化方案是空间换时间，把bitmapMesh画到一个bitmap上，而后和底图进行合成，在native层直接操纵像素
+                     */
                     frameworkPaint.shader = null
                     frameworkPaint.color = nativePageColor
-//                    it.drawPath(paths[0], paint)
-                    nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
+
+                    //接近垂直则不drawBitmapMesh
+                    if (((upsideDownAllPoints.W.y - upsideDownAllPoints.Z.y) / viewHeight).absoluteValue < shadow3VerticalThreshold) {
+                        //绘制synthesizedBitmap
+                        nativeCanvas.drawBitmap(controller.bitmapSynthesizer.synthesizedBitmap, 0f, 0f, frameworkPaint)
+                        controller.bitmapSynthesizer.synthesize(backgroundBitmap, allPoints.W, allPoints.Z, allPoints.S, upsideDown)
+
+                        //画阴影区域3，在synthesizedBitmap之上
+                        frameworkPaint.shader =
+                            LinearGradient(
+                                shaderControlPointPairs[2].first.x,
+                                shaderControlPointPairs[2].first.y,
+                                shaderControlPointPairs[2].second.x,
+                                shaderControlPointPairs[2].second.y,
+                                nativeShadow3Color,
+                                nativeTransparentColor,
+                                Shader.TileMode.CLAMP
+                            )
+                        it.drawPath(shadowPaths[2], paint)
+
+                        //distortionBitmap图层，在阴影区域3图层之上
+                        nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
+                    } else {
+                        //画底页
+                        nativeCanvas.drawBitmap(controller.bitmapSynthesizer.synthesizedBitmap, 0f, 0f, frameworkPaint)
+                        controller.bitmapSynthesizer.synthesize(backgroundBitmap, allPoints.W, allPoints.Z, allPoints.S, upsideDown)
+
+                        //画阴影区域3
+                        val nextPage = with(upsideDownAllPoints) {
+                            val (_, ZTN, WSM, _) = distortedEdges
+                            Path().apply {
+                                moveTo(C)
+                                lineTo(W)
+                                connect(WSM, distortedEdgeDownSampling)
+                                lineTo(M)
+                                lineTo(N)
+                                connect(ZTN, distortedEdgeDownSampling, !upsideDown)
+                                lineTo(Z)
+                                lineTo(C)
+                            }
+                        }
+                        frameworkPaint.shader =
+                            LinearGradient(
+                                shaderControlPointPairs[2].first.x,
+                                shaderControlPointPairs[2].first.y,
+                                shaderControlPointPairs[2].second.x,
+                                shaderControlPointPairs[2].second.y,
+                                nativeShadow3Color,
+                                nativeTransparentColor,
+                                Shader.TileMode.CLAMP
+                            )
+                        it.drawPath(shadowPaths[2], paint)
+                        it.clipPath(nextPage, ClipOp.Difference)
+
+                        //画当前页
+                        frameworkPaint.shader = null
+                        frameworkPaint.color = nativePageColor
+                        nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
+                    }
 
                     //画阴影区域1
                     frameworkPaint.shader = LinearGradient(
@@ -619,9 +726,10 @@ internal fun PTQBookPageViewInner(
                     it.drawPath(shadowPaths[3], paint)
 
                     //画当前页背面
+                    //TODO:垂直Path优化
                     frameworkPaint.shader = null
                     frameworkPaint.color = nativePageColor
-                    it.drawPath(paths[1], paint)
+                    it.drawPath(paths[0], paint)
 
                     //画光泽左侧阴影
                     frameworkPaint.shader = LinearGradient(
@@ -648,15 +756,17 @@ internal fun PTQBookPageViewInner(
                     it.drawPath(shadowPaths[5], paint)
 
                     //加强一下轮廓
-                    paint.shader = null
-                    paint.color = shadow12Color.copy(alpha = 0.14f)
-                    paint.style = PaintingStyle.Stroke
-                    paint.strokeWidth = 1.8f
-                    it.drawPath(paths[3], paint)
+//                    paint.shader = null
+//                    paint.color = shadow12Color.copy(alpha = 0.13f)
+//                    paint.style = PaintingStyle.Stroke
+//                    paint.strokeWidth = 0.5f
+//                    it.drawPath(paths[1], paint)
 
-                    it.clipRect(Rect(Offset.Zero, Offset(viewWidth, viewHeight)))
+                    Log.d(TAG, "PTQBookPageViewInner: ${System.currentTimeMillis() - start}")
+
                 }
-            })
+            }
+
         }
     }
 }
@@ -692,10 +802,12 @@ private inline fun buildStateLoose(
                 changeState(null, null, !upsideDown)
                 return null
             }
+
             points.W.x < minWxRatio * points.C.x && dragDirection.isIn(DragDirection.Up, DragDirection.RightUp, DragDirection.LeftUp, DragDirection.LeftDown) -> {
                 changeState(PageState.WMin, theta, null)
                 return null
             }
+
             theta < minTheta && dragDirection.isIn(DragDirection.Up, DragDirection.RightUp, DragDirection.Right, DragDirection.RightDown) -> {
                 changeState(PageState.ThetaMin, minTheta, null)
                 return null
@@ -762,10 +874,12 @@ private inline fun buildStateWMin(absO: Point, dragEvent: DragEvent, absC: Point
             changeState(PageState.Tight, maxOf(minTheta, theta))
             return null
         }
+
         (looseWx >= minWxRatio * points.C.x) && dragDirection.isIn(DragDirection.LeftDown, DragDirection.Down, DragDirection.RightDown, DragDirection.Left) -> {
             changeState(PageState.Loose, maxOf(minTheta, theta))
             return null
         }
+
         theta < minTheta && dragDirection.isIn(DragDirection.Right, DragDirection.Up, DragDirection.RightUp, DragDirection.RightDown) -> {
             changeState(PageState.ThetaMin, minTheta)
             return null
@@ -831,6 +945,7 @@ private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: P
             changeState(PageState.Tight, minTheta)
             return null
         }
+
         points.H.distanceTo(dragEventCartesian.originTouchPoint) < f && points.W.x > minWx && dragDirection.isIn(
             DragDirection.Left,
             DragDirection.LeftDown,
@@ -841,6 +956,7 @@ private inline fun buildStateThetaMin(absO: Point, dragEvent: DragEvent, absC: P
             changeState(PageState.Loose, minTheta)
             return null
         }
+
         points.H.distanceTo(dragEventCartesian.originTouchPoint) < f && points.W.x <= minWx && dragDirection.isIn(DragDirection.LeftDown, DragDirection.Left, DragDirection.LeftUp) -> {
             changeState(PageState.WMin, minTheta)
             return null
@@ -913,18 +1029,22 @@ private fun onDragWhenTightState(f: Float, currentTheta: Float, absDragEvent: Dr
         DragDirection.Right -> {
             getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
         }
+
         DragDirection.Up, DragDirection.LeftUp -> {
             getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
         }
+
         DragDirection.LeftDown, DragDirection.Down, DragDirection.Left, DragDirection.RightDown -> {
             getTightStateDeltaWhenBack(f, currentTheta, absDragEvent, screenWidth, screenHeight)
         }
+
         DragDirection.RightUp -> {
             val deltaRight = getTightStateDeltaWhenRight(currentTheta, absDragEvent.currentTouchPoint.x, absDragEvent.dragDelta.x, screenWidth)
             val deltaUp = getTightStateDeltaWhenUp(currentTheta, absDragEvent.dragDelta.y)
             val yToX = -absDragEvent.dragDelta.y / absDragEvent.dragDelta.x
             (yToX / (1 + yToX)) * deltaUp + (1 / (1 + yToX)) * deltaRight
         }
+
         else -> 0f
     }
 
@@ -1056,57 +1176,40 @@ private fun algorithmStateTight(absO: Point, absC: Point, theta: Float): Pair<Li
 }
 
 /**
- * 绝对系，根据点计算路径
+ * 绝对系，根据点构建Path
  * @return 第一项为页面路径，第二项为阴影路径，第三项为阴影控制点，第四项为shadow12的宽度。
  * 第二项中的五个子项分别代表区域1、区域2、区域3、区域4（圆弧）、光泽左侧、光泽右侧；
  * 第三项中的四个子项分别代表区域1、区域2、区域3、光泽左侧、光泽右侧；
  * 第四项是区域12阴影宽度。
  */
-private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown: Boolean): PathResult {
+private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown: Boolean, distortedEdgeDownSampling: Int, pathResult: PathResult) {
     val (NVJ, ZTN, WSM, MUI) = distortedEdges
 
-    //构建Path
-    val thisPage = Path().apply {
-        moveTo(W)
-        connect(WSM)
-        lineTo(M)
-        lineTo(N)
-        connect(ZTN, !isUpsideDown)
-        lineTo(Z)
-        lineTo(B)
-        lineTo(O)
-        lineTo(A)
-        lineTo(W)
-    }
+    pathResult.recycle()
 
-    val thisPageBack = Path().apply {
+    /**
+     * 只需要pageBack和outline
+     * @since v1.1.0
+     */
+    //thisPageBack
+    val thisPageBack = pathResult.pagePaths[0].apply {
         moveTo(M)
         lineTo(N)
-        connect(NVJ, isUpsideDown)
+        connect(NVJ, distortedEdgeDownSampling, isUpsideDown)
         lineTo(H)
-        connect(MUI, true)
+        connect(MUI, distortedEdgeDownSampling, true)
         lineTo(M)
     }
 
-    val nextPage = Path().apply {
-        moveTo(C)
-        lineTo(W)
-        connect(WSM)
-        lineTo(M)
-        lineTo(N)
-        connect(ZTN, !isUpsideDown)
-        lineTo(Z)
-        lineTo(C)
-    }
-
-    val outline = Path().apply {
+    //outline
+    pathResult.pagePaths[1].apply {
         moveTo(W)
-        connect(WSM)
-        connect(MUI)
+        connect(WSM, distortedEdgeDownSampling)
+        connect(MUI, distortedEdgeDownSampling)
         lineTo(H)
         lineTo(J)
-        connect(NVJ, !isUpsideDown)
-        connect(ZTN, !isUpsideDown)
+        connect(NVJ, distortedEdgeDownSampling, !isUpsideDown)
+        connect(ZTN, distortedEdgeDownSampling, !isUpsideDown)
     }
 
     //计算阴影
@@ -1134,7 +1237,8 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val S1 = if (!lST.k.isNaN()) Point(S.x + shadow3Width / ((1 - 1 / (1 + lST.k * lST.k)).pow(0.5f)), C.y) else Point(S.x + shadow3Width, C.y)
     val T1 = if (!lST.k.isNaN()) Point(C.x, Line.withKAndOnePoint(lST.k, S1).y(C.x)) else Point(S1.x, O.y)
 
-    val shadow1 = Path().apply {
+    //shadow1
+    pathResult.shadowPaths[0].apply {
         moveTo(H2)
         lineTo(J1)
         quadraticBezierTo(V1, N)
@@ -1143,8 +1247,8 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
         close()
     }
 
-    //圆弧
-    val shadow4 = Path().apply {
+    //圆弧 shadow4
+    pathResult.shadowPaths[3].apply {
         moveTo(H1)
         //处理翻转
         if (C.y == 0f) {
@@ -1156,26 +1260,39 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
         close()
     }
 
-    val shadow2 = Path().apply {
+    //shadow2
+    pathResult.shadowPaths[1].apply {
         moveTo(H)
         lineTo(H1)
         lineTo(I1)
         quadraticBezierTo(U1, M)
         quadraticBezierTo(U, I)
         close()
-        op(this@apply, nextPage, PathOperation.Difference)
     }
 
-    val shadow3 = Path().apply {
+    //shadow3
+    pathResult.shadowPaths[2].apply {
         moveTo(W)
         lineTo(S1)
-        //若接近垂直，则直接画成方形，否则画梯形
+        //若接近垂直，则直接画成矩形，否则画梯形
         if (((T1.y - O.y) / (C.y - O.y)).absoluteValue > shadow3VerticalThreshold) {
+            /**
+             * 绘制优化下解决shadow3与thisPageBack左侧边界不重合的问题：计算出交点再连线
+             * @since v1.1.0
+             */
             lineTo(S1.copy(y = (C.y - O.y).absoluteValue - S1.y))
             lineTo(W.copy(y = (C.y - O.y).absoluteValue - W.y))
         } else {
-            lineTo(T1)
-            lineTo(Z)
+            /**
+             * @since v1.1.0 越界绘制优化：如果Z在BC内，则直接画线，否则求交点
+             */
+            //给一组log数据供参考
+            //buildPath: C.y:0 O.y:1600 upsideDown:true W: Point(x=376.90134, y=0.0) S1: Point(x=523.4354, y=0.0) T1: Point(x=720.0, y=36051.1) Z: Point(x=720.0, y=62926.297)
+            //buildPath: C:1600.0 O.y:0 upsideDown:false W: Point(x=380.06815, y=1600.0) S1: Point(x=526.1546, y=1600.0) T1: Point(x=720.0, y=-46201.938) Z: Point(x=720.0, y=-82226.625)
+            val S1T1_OBx = Line.withKAndOnePoint(lST.k, S1).x(O.y) //S1T1交OB的x坐标
+            val WZ_OBx = Line.withKAndOnePoint(lST.k, W).x(O.y)
+            lineTo(if (S1T1_OBx > C.x) T1 else Point(S1T1_OBx, O.y))
+            lineTo(if (S1T1_OBx > C.x) Z else Point(WZ_OBx, O.y))
         }
         close()
     }
@@ -1198,7 +1315,8 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val lS3T3 = Line.withKAndOnePoint(lST.k, S3)
     val lS4T4 = Line.withKAndOnePoint(lST.k, S4)
 
-    val lustreEndShadow = Path().apply {
+    //lustreEndShadow
+    pathResult.shadowPaths[4].apply {
         if (lustreEndDistance + lustreEndShadowWidth > H.distanceTo(lST)) {
             moveTo(O)
             close()
@@ -1212,7 +1330,8 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
         op(this, thisPageBack, operation = PathOperation.Intersect)
     }
 
-    val lustreStartShadow = Path().apply {
+    //lustreStartShadow
+    pathResult.shadowPaths[5].apply {
         if (lustreEndDistance + lustreEndShadowWidth > H.distanceTo(lST)) {
             moveTo(O)
             close()
@@ -1231,33 +1350,40 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
     val lS1T1 = Line.withKAndOnePoint(lST.k, S1)
     val lHC = Line.withTwoPoints(H, C)
 
-    return PathResult(
-        listOf(thisPage, thisPageBack, nextPage, outline),
-        listOf(shadow1, shadow2, shadow3, shadow4, lustreEndShadow, lustreStartShadow),
-        listOf(
-            Pair(
-                H.avoidNaN(),
-                H2.avoidNaN()
-            ),
-            Pair(
-                H.avoidNaN(),
-                H1.avoidNaN()
-            ),
-            Pair(
-                lKL.intersectAt(lHC).avoidNaN(),
-                lS1T1.intersectAt(lHC).avoidNaN()
-            ),
-            Pair(
-                lS2T2.intersectAt(lHC).avoidNaN(),
-                lS3T3.intersectAt(lHC).avoidNaN()
-            ),
-            Pair(
-                lST.intersectAt(lHC).avoidNaN(),
-                lS4T4.intersectAt(lHC).avoidNaN()
-            )
-        ),
-        shadow12Width
-    )
+    pathResult.shaderControlPointPairs[0] = Pair(H.avoidNaN(), H2.avoidNaN())
+    pathResult.shaderControlPointPairs[1] = Pair(H.avoidNaN(), H1.avoidNaN())
+    pathResult.shaderControlPointPairs[2] = Pair(lKL.intersectAt(lHC).avoidNaN(), lS1T1.intersectAt(lHC).avoidNaN())
+    pathResult.shaderControlPointPairs[3] = Pair(lS2T2.intersectAt(lHC).avoidNaN(), lS3T3.intersectAt(lHC).avoidNaN())
+    pathResult.shaderControlPointPairs[4] = Pair(lST.intersectAt(lHC).avoidNaN(), lS4T4.intersectAt(lHC).avoidNaN())
+
+    pathResult.shadow12Width = shadow12Width
+//    return PathResult(
+//        listOf(thisPageBack, outline),
+//        listOf(shadow1, shadow2, shadow3, shadow4, lustreEndShadow, lustreStartShadow),
+//        listOf(
+//            Pair(
+//                H.avoidNaN(),
+//                H2.avoidNaN()
+//            ),
+//            Pair(
+//                H.avoidNaN(),
+//                H1.avoidNaN()
+//            ),
+//            Pair(
+//                lKL.intersectAt(lHC).avoidNaN(),
+//                lS1T1.intersectAt(lHC).avoidNaN()
+//            ),
+//            Pair(
+//                lS2T2.intersectAt(lHC).avoidNaN(),
+//                lS3T3.intersectAt(lHC).avoidNaN()
+//            ),
+//            Pair(
+//                lST.intersectAt(lHC).avoidNaN(),
+//                lS4T4.intersectAt(lHC).avoidNaN()
+//            )
+//        ),
+//        shadow12Width
+//    )
 }
 
 /**
@@ -1269,7 +1395,8 @@ private fun AllPoints.buildDistortionPoints(
     height: Float,
     meshWidthCount: Int,
     meshHeightCount: Int,
-    isUpsideDown: Boolean): Pair<Array<List<Float>>, FloatArray> {
+    isUpsideDown: Boolean
+): Pair<Array<List<Float>>, FloatArray> {
     val size = (meshWidthCount + 1) * (meshHeightCount + 1) * 2
     val vertices = FloatArray(size)
     val originalVertices = FloatArray(size)
@@ -1287,6 +1414,7 @@ private fun AllPoints.buildDistortionPoints(
     val r = N.distanceTo(lWZ)
     val absC = C.toAbsoluteSystem()
     val absH = H.toAbsoluteSystem()
+    val kCHAbsolute = Line.withTwoPoints(absC, absH).k
 
     var index = 0
     (0..meshHeightCount).forEach { i ->
@@ -1330,7 +1458,7 @@ private fun AllPoints.buildDistortionPoints(
         }
 
         val d = G.distanceTo(lWZ)
-        val absQ = absG.getExtensionPointInAbs(Line.withKAndOnePoint(Line.withTwoPoints(absC, absH).k, absG), d - r * sin(d * delta / r))
+        val absQ = absG.getExtensionPointInAbs(Line.withKAndOnePoint(kCHAbsolute, absG), d - r * sin(d * delta / r))
 
         //如果是最右侧边界点
         if ((xIndex / 2 + 1) % (meshWidthCount + 1) == 0) {
@@ -1341,6 +1469,7 @@ private fun AllPoints.buildDistortionPoints(
                         add(absQ.y)
                     }
                 }
+
                 ZTNRange.contains(G.y) -> {
                     ZTNPoints.apply {
                         add(absQ.x)
@@ -1358,6 +1487,7 @@ private fun AllPoints.buildDistortionPoints(
                         add(absQ.y)
                     }
                 }
+
                 MUIRange.contains(G.x) -> {
                     MUIPoints.apply {
                         add(absQ.x)
@@ -1384,7 +1514,16 @@ private fun DragEvent.getSymmetricalDragEventAbout(line: Line): DragEvent {
     return copy(originTouchPoint = origin, currentTouchPoint = current)
 }
 
-private data class PathResult(val pagePaths: List<Path>, val shadowPaths: List<Path>, val shaderControlPointPairs: List<Pair<Point, Point>>, val shadow12Width: Float)
+private data class PathResult(val pagePaths: List<Path>, val shadowPaths: List<Path>, val shaderControlPointPairs: MutableList<Pair<Point, Point>>, var shadow12Width: Float) {
+    fun recycle() {
+        pagePaths.forEach {
+            it.reset()
+        }
+        shadowPaths.forEach {
+            it.reset()
+        }
+    }
+}
 
 private data class DragEvent(val originTouchPoint: Point, val currentTouchPoint: Point) {
     val dragDelta get() = currentTouchPoint - originTouchPoint
@@ -1416,6 +1555,7 @@ private data class DragEvent(val originTouchPoint: Point, val currentTouchPoint:
                 }
             }
         }
+
         line.k < 0f -> {
             val lParallel = Line.withKAndOnePoint(line.k, originTouchPoint)
             val lVertical = Line.withKAndOnePoint(-1 / line.k, originTouchPoint)
@@ -1433,6 +1573,7 @@ private data class DragEvent(val originTouchPoint: Point, val currentTouchPoint:
                 }
             }
         }
+
         else -> DragDirection.Static
     }
 
@@ -1471,8 +1612,13 @@ data class Point(var x: Float, var y: Float) {
     //这两个函数一样，但是还是分成两个函数写，在调用时语义更明确
     //相对系坐标转换为相对系坐标，y坐标相反
     internal fun toAbsoluteSystem() = Point(x, -y)
+
     //绝对系坐标转换为相对系坐标，y坐标相反
     internal fun toCartesianSystem() = Point(x, -y)
+
+    companion object {
+        val Zero = Point(0f, 0f)
+    }
 }
 
 private fun Point.getSymmetricalPointAbout(line: Line) = with(line) {
@@ -1504,9 +1650,19 @@ private fun Path.quadraticBezierTo(controlPoint: Point?, endPoint: Point?) {
     }
 }
 
-private fun Path.connect(points: List<Float>, reverse: Boolean = false) {
+/**
+ * 连接所有点得到边缘类贝塞尔曲线
+ * 在一般的情况下，绘制时不需要考虑是否upsideDown的问题，因为upsideDownAllPoints中已经是翻转好了的待绘制的点
+ * 但connect时仍需要手动处理翻转，这是因为在计算 @param points 时，是无论upsideDown与否都是从上往下按顺序计算的，这之中引入了翻转问题
+ */
+private fun Path.connect(points: List<Float>, distortedEdgeDownSampling: Int, reverse: Boolean = false) {
     val size = points.size / 2
-    (0 until size).forEach { i ->
+    /**
+     * @since v1.1.0 下采样以提高绘制性能
+     */
+    val downSampling = maxOf(size / distortedEdgeDownSampling, 1)
+
+    (0 until size step downSampling).forEach { i ->
         val xIndex = i + i
         if (!reverse) {
             lineTo(points[xIndex], points[xIndex + 1])
@@ -1575,6 +1731,32 @@ private fun Point.getExtensionPointInAbs(line: Line, d: Float): Point {
     val newX = x - d / (1 + line.k * line.k).pow(0.5f)
     return Point(newX, line.y(newX))
 }
+
+//private fun Bitmap.synthsize(
+//    lower: Bitmap,
+//    upper: Bitmap,
+//    allPoints: AllPoints
+//) {
+//    val Z = allPoints.Z
+//    val W = allPoints.W
+//    val lWZ = Line.withTwoPoints(Z, W)
+//    val kZWReciprocal = 1 / lWZ.k
+//    val zwBufferSize = height - maxOf(0, Z.y.toInt())
+//    val zwBufferOffset = height - zwBufferSize
+//
+//    for (i in zwBufferOffset until height) {
+//        zwBuffer[i] = ((i - lWZ.b) * kZWReciprocal).toInt()
+//    }
+//
+//    //两次拷贝，很浪费
+//    for (i in 0 until height) {
+//        for (j in 0 until width) {
+//            val index = width * i + j
+//            buffer[index] = if (j <= zwBuffer[i]) upper.getPixel(j, i) else lower.getPixel(j, i)
+//        }
+//    }
+//    setPixels(buffer, 0, width, 0, 0, width, height)
+//}
 
 private data class FloatRange(val start: Float, val end: Float) {
     fun constraints(value: Float) = when {
@@ -1697,3 +1879,4 @@ private data class AllPoints(
         )
     }
 }
+

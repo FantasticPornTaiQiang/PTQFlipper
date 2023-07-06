@@ -48,7 +48,7 @@ class MainActivity : AppCompatActivity() {
                     val ctx = LocalContext.current
 
                     LaunchedEffect(Unit) {
-                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                         systemUiController.setStatusBarColor(Color.Transparent, true)
                         systemUiController.setNavigationBarColor(Color.Transparent)
                     }
