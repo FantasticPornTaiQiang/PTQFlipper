@@ -141,58 +141,58 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
     fun isRenderOk() = needBitmapPages.isEmpty()
 }
 
-/**
- * Bitmap合成器，在native层合成lowerBitmap和distortedBitmap
- * 把BitmapSynthesizer放进BitmapController里是为了生命周期方便一并管理
- * @since v1.1.0
- */
-internal class BitmapSynthesizer {
-    var synthesizedBitmap: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8)
-
-    private external fun nSynthesize(
-        lower: Bitmap,
-        synthesized: Bitmap,
-        WZS: FloatArray,
-        upsideDown: Boolean,
-    )
-
-    private external fun nResize(width: Int, height: Int, synthesized: Bitmap)
-    private external fun nDestroy()
-    private external fun nClearSynthesizedCache(synthesized: Bitmap)
-
-    companion object {
-        init {
-            System.loadLibrary("bitmap-mesh")
-        }
-    }
-
-    fun destroy() {
-        synthesizedBitmap.recycle()
-        nDestroy()
-    }
-
-    fun resize(width: Int, height: Int) = nResize(width, height, synthesizedBitmap)
-
-    /**
-     * 合成distortion和background
-     * @since v1.1.0
-     */
-    fun synthesize(
-        lower: Bitmap,
-        W: Point,
-        Z: Point,
-        S: Point,
-        upsideDown: Boolean,
-    ) {
-        nSynthesize(
-            lower,
-            synthesizedBitmap,
-            floatArrayOf(W.x, W.y, Z.x, Z.y, S.x, S.y),
-            upsideDown
-        )
-    }
-
-    fun clearSynthesizedCache() {
-        nClearSynthesizedCache(synthesizedBitmap)
-    }
-}
+///**
+// * Bitmap合成器，在native层合成lowerBitmap和distortedBitmap
+// * 把BitmapSynthesizer放进BitmapController里是为了生命周期方便一并管理
+// * @since v1.1.0
+// */
+//internal class BitmapSynthesizer {
+//    var synthesizedBitmap: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8)
+//
+//    private external fun nSynthesize(
+//        lower: Bitmap,
+//        synthesized: Bitmap,
+//        WZS: FloatArray,
+//        upsideDown: Boolean,
+//    )
+//
+//    private external fun nResize(width: Int, height: Int, synthesized: Bitmap)
+//    private external fun nDestroy()
+//    private external fun nClearSynthesizedCache(synthesized: Bitmap)
+//
+//    companion object {
+//        init {
+//            System.loadLibrary("bitmap-mesh")
+//        }
+//    }
+//
+//    fun destroy() {
+//        synthesizedBitmap.recycle()
+//        nDestroy()
+//    }
+//
+//    fun resize(width: Int, height: Int) = nResize(width, height, synthesizedBitmap)
+//
+//    /**
+//     * 合成distortion和background
+//     * @since v1.1.0
+//     */
+//    fun synthesize(
+//        lower: Bitmap,
+//        W: Point,
+//        Z: Point,
+//        S: Point,
+//        upsideDown: Boolean,
+//    ) {
+//        nSynthesize(
+//            lower,
+//            synthesizedBitmap,
+//            floatArrayOf(W.x, W.y, Z.x, Z.y, S.x, S.y),
+//            upsideDown
+//        )
+//    }
+//
+//    fun clearSynthesizedCache() {
+//        nClearSynthesizedCache(synthesizedBitmap)
+//    }
+//}
