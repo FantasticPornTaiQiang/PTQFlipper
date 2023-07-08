@@ -396,7 +396,7 @@ internal fun PTQBookPageViewInner(
                     isNextOrPrevious = !isLeftToRight
                     if (isRightToLeftWhenStartLast != isRightToLeftWhenStart) {
                         //since v1.1.0 上一次和这一次起手不一样则清空synthesizedBitmap缓存
-                        controller.bitmapSynthesizer.clearSynthesizedCache()
+//                        controller.bitmapSynthesizer.clearSynthesizedCache()
                     }
                 }
             }
@@ -464,7 +464,7 @@ internal fun PTQBookPageViewInner(
                             isRightToLeftWhenStart = isRightToLeft
                             if (isRightToLeftWhenStartLast != isRightToLeftWhenStart) {
                                 //since v1.1.0 上一次和这一次起手不一样则清空synthesizedBitmap缓存
-                                controller.bitmapSynthesizer.clearSynthesizedCache()
+//                                controller.bitmapSynthesizer.clearSynthesizedCache()
                             }
 
                             //如果是第一页或者最后一页，直接return，之后松手就会触发onDragEnd，且state=State.Idle
@@ -613,8 +613,6 @@ internal fun PTQBookPageViewInner(
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawIntoCanvas {
-                    val start = System.currentTimeMillis()
-
                     val paint = Paint()
                     val frameworkPaint = paint.asFrameworkPaint()
                     paint.isAntiAlias = true
@@ -640,8 +638,9 @@ internal fun PTQBookPageViewInner(
                     //接近垂直则不drawBitmapMesh
                     if (((upsideDownAllPoints.W.y - upsideDownAllPoints.Z.y) / viewHeight).absoluteValue < shadow3VerticalThreshold) {
                         //绘制synthesizedBitmap
-                        nativeCanvas.drawBitmap(controller.bitmapSynthesizer.synthesizedBitmap, 0f, 0f, frameworkPaint)
-                        controller.bitmapSynthesizer.synthesize(backgroundBitmap, allPoints.W, allPoints.Z, allPoints.S, upsideDown)
+//                        nativeCanvas.drawBitmap(controller.bitmapSynthesizer.synthesizedBitmap, 0f, 0f, frameworkPaint)
+//                        controller.bitmapSynthesizer.synthesize(backgroundBitmap, allPoints.W, allPoints.Z, allPoints.S, upsideDown)
+                        nativeCanvas.drawBitmap(backgroundBitmap, 0f, 0f, frameworkPaint)
 
                         //画阴影区域3，在synthesizedBitmap之上
                         frameworkPaint.shader =
@@ -660,8 +659,9 @@ internal fun PTQBookPageViewInner(
                         nativeCanvas.drawBitmapMesh(distortBitmap, bitmapMeshCount.first, bitmapMeshCount.second, distortedVertices, 0, null, 0, frameworkPaint)
                     } else {
                         //画底页
-                        nativeCanvas.drawBitmap(controller.bitmapSynthesizer.synthesizedBitmap, 0f, 0f, frameworkPaint)
-                        controller.bitmapSynthesizer.synthesize(backgroundBitmap, allPoints.W, allPoints.Z, allPoints.S, upsideDown)
+//                        nativeCanvas.drawBitmap(controller.bitmapSynthesizer.synthesizedBitmap, 0f, 0f, frameworkPaint)
+//                        controller.bitmapSynthesizer.synthesize(backgroundBitmap, allPoints.W, allPoints.Z, allPoints.S, upsideDown)
+                        nativeCanvas.drawBitmap(backgroundBitmap, 0f, 0f, frameworkPaint)
 
                         //画阴影区域3
                         val nextPage = with(upsideDownAllPoints) {
@@ -1274,10 +1274,6 @@ private fun AllPoints.buildPath(distortedEdges: Array<List<Float>>, isUpsideDown
         lineTo(S1)
         //若接近垂直，则直接画成矩形，否则画梯形
         if (((T1.y - O.y) / (C.y - O.y)).absoluteValue > shadow3VerticalThreshold) {
-            /**
-             * 绘制优化下解决shadow3与thisPageBack左侧边界不重合的问题：计算出交点再连线
-             * @since v1.1.0
-             */
             lineTo(S1.copy(y = (C.y - O.y).absoluteValue - S1.y))
             lineTo(W.copy(y = (C.y - O.y).absoluteValue - W.y))
         } else {

@@ -19,7 +19,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
     //记录前一页，当前页，后一页，如果current==0，则bitmapBuffer[0]为null。current==total同理
     private val bitmapBuffer = arrayOfNulls<Bitmap?>(3)
 
-    val bitmapSynthesizer = BitmapSynthesizer()
+//    val bitmapSynthesizer = BitmapSynthesizer()
 
     //需要获取的页面，以及对应的BufferIndex
     private var needBitmapPages = mutableListOf<Pair<Int, Int>>()
@@ -60,7 +60,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
         if (needBitmapPages.isNotEmpty()) return
         calculateNeedBitmapPages(page)
         exeRecompositionBlock?.let { it() }
-        bitmapSynthesizer.clearSynthesizedCache()
+//        bitmapSynthesizer.clearSynthesizedCache()
     }
 
     fun refresh() {
@@ -88,7 +88,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
         if (bitmapBuffer[first.second] == null) {
             needNew = true
         } else {
-            //新的大小发生变化（因为config不变，所以bitmap的大小可以认为只受width, height影响，而不再去计算allocationByteCount
+            //新的大小发生变化（因为config不变，所以bitmap的大小可以认为只受width, height影响，而不再去计算allocationByteCount）
             bitmapBuffer[first.second]!!.let {
                 if (width != it.width || height != it.height) {
                     it.recycle()
@@ -100,15 +100,13 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
         if (needNew) {
             bitmapBuffer[first.second] = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
 
-            with(bitmapSynthesizer) {
-                if (synthesizedBitmap.width != width || synthesizedBitmap.height != height) {
-                    Log.d(TAG, "renderThenSave: $width")
-                    //synthesizedBitmap的管理可以放到native
-                    synthesizedBitmap.recycle()
-                    synthesizedBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    resize(width, height)
-                }
-            }
+//            with(bitmapSynthesizer) {
+//                if (synthesizedBitmap.width != width || synthesizedBitmap.height != height) {
+//                    synthesizedBitmap.recycle()
+//                    synthesizedBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+//                    resize(width, height)
+//                }
+//            }
         }
 
         canvas.let {
@@ -126,7 +124,7 @@ internal class PTQBookPageBitmapController(@IntRange(from = 0L) var totalPage: I
         bitmapBuffer.forEach {
             it?.recycle()
         }
-        bitmapSynthesizer.destroy()
+//        bitmapSynthesizer.destroy()
     }
 
     /**
