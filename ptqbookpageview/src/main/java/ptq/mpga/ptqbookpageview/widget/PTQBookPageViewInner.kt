@@ -73,8 +73,8 @@ private const val lustreEndMinDistance = 6f //光泽左侧最小距离，即当W
 private const val lustreEndShadowMaxWidth = 30f //光泽左侧阴影最大宽度
 private const val lustreEndShadowMinWidth = 20f //光泽左侧阴影最小宽度，即当WEmin时的宽度
 
-private const val distortionInterval = 30 //扭曲的间隔
-private const val bezierEdgeDownSampling = 45 //NVJ、ZTN等贝塞尔曲线边的下采样值
+private const val distortionInterval = 25 //扭曲的间隔
+private const val bezierEdgeDownSampling = 50 //NVJ、ZTN等贝塞尔曲线边的下采样值（此值越小，采样点越少）
 
 private enum class PageState {
     Loose, WMin, ThetaMin, Tight
@@ -111,15 +111,15 @@ internal fun PTQBookPageViewInner(
     val bitmapMeshCount by remember(bounds) {
         mutableStateOf(
             Pair(
-                ((viewWidth / 1200) * viewWidth / distortionInterval).toInt(), //对比720*1200的手机乘一个比例
-                ((viewHeight / 720) * viewHeight / distortionInterval).toInt(),
+                ((viewWidth / 720) * viewWidth / distortionInterval).toInt(), //对比720*1200的手机乘一个比例
+                ((viewHeight / 1600) * viewHeight / distortionInterval).toInt(),
             )
         )
     }
     //connect时的下采样数
     val distortedEdgeDownSampling by remember(bounds) {
         mutableStateOf(
-            (viewHeight * viewWidth * bezierEdgeDownSampling / 1200 / 720).toInt()
+            (viewHeight * viewWidth * bezierEdgeDownSampling / 1600 / 720).toInt()
         )
     }
 
@@ -761,8 +761,6 @@ internal fun PTQBookPageViewInner(
 //                    paint.style = PaintingStyle.Stroke
 //                    paint.strokeWidth = 0.5f
 //                    it.drawPath(paths[1], paint)
-
-                    Log.d(TAG, "PTQBookPageViewInner: ${System.currentTimeMillis() - start}")
 
                 }
             }
