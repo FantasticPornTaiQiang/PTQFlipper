@@ -35,8 +35,8 @@ import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewConfig
 import ptq.mpga.ptqbookpageview.widget.rememberPTQBookPageViewState
 
 private val albumList = arrayOf(
-//    R.drawable.album1,
-    R.drawable.album2,
+    R.drawable.album1,
+//    R.drawable.album2,
     R.drawable.album3,
     R.drawable.album4,
     R.drawable.album5,
