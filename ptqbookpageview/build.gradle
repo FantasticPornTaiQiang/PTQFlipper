@@ -6,10 +6,10 @@ plugins {
 
 android {
     compileSdk 33
-    ndkVersion '25.2.9519653'
+//    ndkVersion '25.2.9519653'
 
     defaultConfig {
-        minSdk 26
+        minSdk 16
         targetSdk 33
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -40,11 +40,11 @@ android {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
+//    externalNativeBuild {
+//        cmake {
+//            path "src/main/cpp/CMakeLists.txt"
+//        }
+//    }
 }
 
 dependencies {

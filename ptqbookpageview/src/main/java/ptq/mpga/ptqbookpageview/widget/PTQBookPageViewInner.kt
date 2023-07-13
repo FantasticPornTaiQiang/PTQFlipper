@@ -3,7 +3,7 @@ package ptq.mpga.ptqbookpageview.widget
 import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
-import android.util.Log
+import androidx.annotation.ColorLong
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.animateFloatAsState
@@ -73,8 +73,8 @@ private const val lustreEndMinDistance = 6f //光泽左侧最小距离，即当W
 private const val lustreEndShadowMaxWidth = 30f //光泽左侧阴影最大宽度
 private const val lustreEndShadowMinWidth = 20f //光泽左侧阴影最小宽度，即当WEmin时的宽度
 
-private const val distortionInterval = 25 //扭曲的间隔
-private const val bezierEdgeDownSampling = 50 //NVJ、ZTN等贝塞尔曲线边的下采样值（此值越小，采样点越少）
+//private const val distortionInterval = 25 //扭曲的间隔
+//private const val bezierEdgeDownSampling = 50 //NVJ、ZTN等贝塞尔曲线边的下采样值（此值越小，采样点越少）
 
 private enum class PageState {
     Loose, WMin, ThetaMin, Tight
@@ -108,18 +108,18 @@ internal fun PTQBookPageViewInner(
     val viewWidth = bounds.width
 
     //扭曲格点数
-    val bitmapMeshCount by remember(bounds) {
+    val bitmapMeshCount by remember(bounds, localConfig.distortionInterval) {
         mutableStateOf(
             Pair(
-                ((viewWidth / 720) * viewWidth / distortionInterval).toInt(), //对比720*1200的手机乘一个比例
-                ((viewHeight / 1600) * viewHeight / distortionInterval).toInt(),
+                ((viewWidth / 720) * viewWidth / localConfig.distortionInterval).toInt(), //对比720*1200的手机乘一个比例
+                ((viewHeight / 1600) * viewHeight / localConfig.distortionInterval).toInt(),
             )
         )
     }
     //connect时的下采样数
-    val distortedEdgeDownSampling by remember(bounds) {
+    val distortedEdgeDownSampling by remember(bounds, localConfig.distortionInterval) {
         mutableStateOf(
-            (viewHeight * viewWidth * bezierEdgeDownSampling / 1600 / 720).toInt()
+            (viewHeight * viewWidth * localConfig.distortionInterval / 1600 / 720).toInt()
         )
     }
 
@@ -207,15 +207,15 @@ internal fun PTQBookPageViewInner(
     //页面颜色
     val pageColor = localConfig.pageColor
     //12区域阴影颜色
-    val nativeShadow12Color by remember { mutableStateOf(android.graphics.Color.toArgb(shadow12Color.value.toLong())) }
+    val nativeShadow12Color by remember { mutableStateOf(toArgb(shadow12Color.value.toLong())) }
     //3区阴影颜色
-    val nativeShadow3Color by remember { mutableStateOf(android.graphics.Color.toArgb(shadow3Color.value.toLong())) }
+    val nativeShadow3Color by remember { mutableStateOf(toArgb(shadow3Color.value.toLong())) }
     //光泽阴影颜色
-    val nativeLustreColor by remember { mutableStateOf(android.graphics.Color.toArgb(lustreColor.value.toLong())) }
+    val nativeLustreColor by remember { mutableStateOf(toArgb(lustreColor.value.toLong())) }
     //页面颜色
-    val nativePageColor by remember(pageColor) { mutableStateOf(android.graphics.Color.toArgb(pageColor.value.toLong())) }
+    val nativePageColor by remember(pageColor) { mutableStateOf(toArgb(pageColor.value.toLong())) }
     //透明色
-    val nativeTransparentColor by remember { mutableStateOf(android.graphics.Color.toArgb(Color.Transparent.value.toLong())) }
+    val nativeTransparentColor by remember { mutableStateOf(toArgb(Color.Transparent.value.toLong())) }
 
     //退出动画lambda
     val exeExitAnim = rememberUpdatedState {
@@ -1874,3 +1874,6 @@ private data class AllPoints(
     }
 }
 
+fun toArgb(@ColorLong color: Long): Int {
+    return (color shr 32).toInt()
+}

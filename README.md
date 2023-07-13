@@ -10,7 +10,10 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 [设计思路] [传送门](https://juejin.cn/post/7236636296876818491)
 
-[源码解析] 还没写完
+[源码解析]
+
+*   [算法部分](https://www.bilibili.com/video/BV1s24y1A7xM)
+*   [绘制和动画部分](https://www.bilibili.com/video/BV1FP411X7Vu)（包括文字扭曲、点击动画、阴影等效果）
 
 <img src="screenshot/demo.gif" height="500">
 
@@ -121,6 +124,12 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 - pageColor **当前页背面**的颜色（页面正面的颜色在 contents 的 Box 的 background modifier 中设置）
 
 - disabled 整个组件是否禁用（若想单独禁用单击或拖动手势，请看[高级定制](#3-高级定制)）
+
+v1.1.0新增属性：
+
+- distortionInterval 图像扭曲的采样间隔，可以根据屏幕大小去作适配，此值越小，曲线越精密，但同样地，计算开销会越大，性能会下降
+
+- bezierEdgeDownSampling 边缘扭曲的采样间隔，可以根据屏幕大小去作适配，此值越大，曲线越精密，但同样地，计算开销会越大，性能会下降（变化不是线性的）
 
 config 以参数的形式传入组件以生效，示例如下
 
@@ -273,3 +282,16 @@ dragBehavior(block: (
 [示例代码](https://github.com/FantasticPornTaiQiang/PTQFlipper/blob/main/app/src/main/java/ptq/mpga/pinance/NovelActivity.kt)
 
 ---
+
+## 4 更新日志
+
+**v1.0.0** 
+- 初始版本，readme内的基本功能
+
+**v1.0.1**
+- 修复跟随算法bug
+
+**v1.1.0**
+- 配置项新增distortionInterval和bezierEdgeDownSampling
+- 性能优化
+- 移除了minSdk26的限制
