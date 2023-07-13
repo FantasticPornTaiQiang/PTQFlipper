@@ -65,7 +65,14 @@ class NovelActivity : AppCompatActivity() {
     }
 }
 
-private val pageColorList = listOf(Color(0xffbfefff), Color(0xfff5f5f5), Color(0xffffa07a), Color(0xffff6eb4), Color(0xffc1ffc1))
+private val pageColorList = listOf(
+    Color(0xffbfefff),
+    Color(0xfff5f5f5),
+    Color(0xffffa07a),
+    Color(0xffff6eb4),
+    Color(0xffc1ffc1),
+    Color(0xff8d78e4)
+)
 
 private val stickerList = arrayOf(
     R.drawable.sticker49,
@@ -95,7 +102,10 @@ fun BoxScope.PTQView() {
 
     val ctx = LocalContext.current
     var state by rememberPTQBookPageViewState(pageCount = 100, currentPage = 0)
-    var config by rememberPTQBookPageViewConfig(pageColor = Color(0xfff5f5f5))
+    var config by rememberPTQBookPageViewConfig(
+        pageColor = Color(0xfff5f5f5),
+        distortionInterval = 20
+    )
 
     var padding by remember { mutableStateOf(arrayOf(0f, 0f, 0f, 0f)) }
     var diySize by remember { mutableStateOf(false) }
