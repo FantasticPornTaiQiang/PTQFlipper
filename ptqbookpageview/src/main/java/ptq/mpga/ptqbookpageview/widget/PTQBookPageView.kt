@@ -137,18 +137,22 @@ fun PTQBookPageView(
                     controller = controller,
                     callbacks = callbacks.value,
                     onNext = {
-                        if (state.currentPage == null && controller.currentPage < controller.totalPage - 1) {
-                            controller.needBitmapAt(controller.currentPage + 1)
-                            callbacks.value.onTurnPageRequest(controller.currentPage, true, true)
-                        } else {
-                            callbacks.value.onTurnPageRequest(controller.currentPage, true, controller.currentPage < controller.totalPage - 1)
+                        with(controller) {
+                            if (state.currentPage == null && currentPage < totalPage - 1) {
+                                needBitmapAt(currentPage + 1)
+                                callbacks.value.onTurnPageRequest(currentPage, true, true)
+                            } else {
+                                callbacks.value.onTurnPageRequest(currentPage, true, currentPage < totalPage - 1)
+                            }
                         }
                     }, onPrevious = {
-                        if (state.currentPage == null && controller.currentPage > 0) {
-                            controller.needBitmapAt(controller.currentPage - 1)
-                            callbacks.value.onTurnPageRequest(controller.currentPage, false, true)
-                        } else {
-                            callbacks.value.onTurnPageRequest(controller.currentPage, false, controller.currentPage > 0)
+                        with(controller) {
+                            if (state.currentPage == null && currentPage > 0) {
+                                needBitmapAt(currentPage - 1)
+                                callbacks.value.onTurnPageRequest(currentPage, false, true)
+                            } else {
+                                callbacks.value.onTurnPageRequest(currentPage, false, currentPage > 0)
+                            }
                         }
                     }
                 )
