@@ -25,7 +25,7 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 ### 1.1 引入
 
-1、在项目的 root 的 build.gradle 中引入仓库。
+1、在项目的 root 的 build.gradle 中引入仓库。（高版本gradle是在settings.gradle里配）
 
 ```groovy
     allprojects {
