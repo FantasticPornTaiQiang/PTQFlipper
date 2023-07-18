@@ -66,11 +66,15 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 
 - 在 rememberPTQBookPageViewState 中**设置总页数**
 - **请务必在 contents 的最末尾调用 refresh 方法以保证 View 显示的内容正常**
-    - 暂时不支持像LazyColumn这种内部状态会快速变化的View（除非你能监听到状态停止变化的时刻，然后手动调用refresh，总之就是要保证refresh能调用到） 
+    - 例如需要网络请求图片，那么请在请求成功后手动refresh，把新内容同步到组件内
 - 在 contents 中利用回调参数 currentPage 设置**当前页显示的内容**
-- 在 contents 中，最外层是一个 fillMaxSize 的 Box，并需要使用 background 设置**当前纸页正面**的颜色（不支持带透明度）
+- 在 contents 中，最外层是一个 fillMaxSize 的 Box，并需要使用 background 设置**当前纸页正面**的颜色（）
 - 在 contents 的 Box 中（即示例代码的注释处），**可以自定义任何非动态的内容**
 
+**注：不支持：**
+- 不支持纸张（即背景色）带透明度
+- 不支持纸张设置圆角（即必须是矩形的）
+- 暂时不支持像LazyColumn这种内部状态会快速变化的View（除非你能监听到状态停止变化的时刻，然后手动调用refresh，总之就是要保证refresh能调用到） 
 ---
 
 ## 2 定制
