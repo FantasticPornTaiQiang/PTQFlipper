@@ -3,6 +3,7 @@ package ptq.mpga.ptqbookpageview.widget
 import android.graphics.LinearGradient
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.util.Log
 import androidx.annotation.ColorLong
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.TweenSpec
@@ -61,8 +62,8 @@ private const val shadowThreshold = 26f //阴影1、2阈值
 private const val shadowPart3to1Ratio = 1.5f //阴影3与阴影1的宽度比
 private const val shadow3VerticalThreshold = 30 //处理当接近垂直时，底层绘制api不正常工作的问题
 
-private val shadow12Color = Color.Black.copy(alpha = 0.35f) //12部分阴影的颜色
-private val shadow3Color = Color.Black.copy(alpha = 0.68f) //3部分阴影的颜色
+private val shadow12Color = Color.Black.copy(alpha = 0.28f) //12部分阴影的颜色
+private val shadow3Color = Color.Black.copy(alpha = 0.6f) //3部分阴影的颜色
 private val lustreColor = Color.Black.copy(alpha = 0.02f) //光泽部分阴影的颜色
 
 //最好设置为统一比例
@@ -627,11 +628,11 @@ internal fun PTQBookPageViewInner(
                     }
 
                     //画当前页
-                    /**
-                     * @since v1.1.0
-                     * 从前的做法是先画底图后画drawBitmapMesh，但drawBitmapMesh方法可能会有闪动，即在底图区域有闪动，因此采用了clip的方式，但clip会导致耗时增加
-                     * 因此优化方案是空间换时间，把bitmapMesh画到一个bitmap上，而后和底图进行合成，在native层直接操纵像素
-                     */
+//                    /**
+//                     * @since v1.1.0
+//                     * 从前的做法是先画底图后画drawBitmapMesh，但drawBitmapMesh方法可能会有闪动，即在底图区域有闪动，因此采用了clip的方式，但clip会导致耗时增加
+//                     * 因此优化方案是空间换时间，把bitmapMesh画到一个bitmap上，而后和底图进行合成，在native层直接操纵像素
+//                     */
                     frameworkPaint.shader = null
                     frameworkPaint.color = nativePageColor
 
@@ -677,6 +678,7 @@ internal fun PTQBookPageViewInner(
                                 lineTo(C)
                             }
                         }
+
                         frameworkPaint.shader =
                             LinearGradient(
                                 shaderControlPointPairs[2].first.x,
@@ -761,7 +763,6 @@ internal fun PTQBookPageViewInner(
 //                    paint.style = PaintingStyle.Stroke
 //                    paint.strokeWidth = 0.5f
 //                    it.drawPath(paths[1], paint)
-
                 }
             }
 
@@ -1508,6 +1509,14 @@ private fun DragEvent.getSymmetricalDragEventAbout(line: Line): DragEvent {
     return copy(originTouchPoint = origin, currentTouchPoint = current)
 }
 
+/**
+ * 各类计算好的Path
+ * @since v1.1.0
+ * @param pagePaths 页面路径，具体地：List有两个元素，第一个是thisPageBack，第二个是outline
+ * @param shadowPaths 阴影路径，具体地：List有六个元素，分别代表区域1、区域2、区域3、区域4（圆弧）、光泽左侧、光泽右侧
+ * @param shaderControlPointPairs 各个阴影控制点，具体地，List有五个元素，分别代表区域1、区域2、区域3、光泽左侧、光泽右侧
+ * @param shadow12Width shadow12的宽度
+ */
 private data class PathResult(val pagePaths: List<Path>, val shadowPaths: List<Path>, val shaderControlPointPairs: MutableList<Pair<Point, Point>>, var shadow12Width: Float) {
     fun recycle() {
         pagePaths.forEach {
@@ -1726,32 +1735,6 @@ private fun Point.getExtensionPointInAbs(line: Line, d: Float): Point {
     return Point(newX, line.y(newX))
 }
 
-//private fun Bitmap.synthsize(
-//    lower: Bitmap,
-//    upper: Bitmap,
-//    allPoints: AllPoints
-//) {
-//    val Z = allPoints.Z
-//    val W = allPoints.W
-//    val lWZ = Line.withTwoPoints(Z, W)
-//    val kZWReciprocal = 1 / lWZ.k
-//    val zwBufferSize = height - maxOf(0, Z.y.toInt())
-//    val zwBufferOffset = height - zwBufferSize
-//
-//    for (i in zwBufferOffset until height) {
-//        zwBuffer[i] = ((i - lWZ.b) * kZWReciprocal).toInt()
-//    }
-//
-//    //两次拷贝，很浪费
-//    for (i in 0 until height) {
-//        for (j in 0 until width) {
-//            val index = width * i + j
-//            buffer[index] = if (j <= zwBuffer[i]) upper.getPixel(j, i) else lower.getPixel(j, i)
-//        }
-//    }
-//    setPixels(buffer, 0, width, 0, 0, width, height)
-//}
-
 private data class FloatRange(val start: Float, val end: Float) {
     fun constraints(value: Float) = when {
         end in start..value -> end
@@ -1853,7 +1836,7 @@ private data class AllPoints(
         Z.toCartesianSystem()
     )
 
-    fun getSymmetricalPointAboutLine(line: Line) = with(line) {
+    internal fun getSymmetricalPointAboutLine(line: Line) = with(line) {
         AllPoints(
             O.getSymmetricalPointAbout(this),
             A.getSymmetricalPointAbout(this),

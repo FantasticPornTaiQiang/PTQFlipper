@@ -64,7 +64,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout-compose:1.0.1'
     implementation 'com.google.accompanist:accompanist-systemuicontroller:0.15.0'
     implementation "com.google.accompanist:accompanist-insets:0.15.0"
-    implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:1.1.0'
-//    implementation project(':ptqbookpageview')
+//    implementation 'com.github.FantasticPornTaiQiang:PTQFlipper:1.1.0'
+    implementation project(':ptqbookpageview')
     implementation 'io.github.shixinzhang:android-bitmap-monitor:1.1.0'
 }

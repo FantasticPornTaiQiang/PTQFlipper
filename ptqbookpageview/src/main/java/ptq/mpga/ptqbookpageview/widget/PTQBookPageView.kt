@@ -2,6 +2,7 @@ package ptq.mpga.ptqbookpageview.widget
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*

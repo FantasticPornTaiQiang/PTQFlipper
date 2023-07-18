@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -36,6 +37,12 @@ private const val TAG = "PTQBookPageMainActivity"
 
 class MainActivity : AppCompatActivity() {
 
+    val pageRoute = mapOf(
+        "小说" to NovelActivity::class.java,
+        "画册" to AlbumActivity::class.java,
+        "画廊" to GalleryActivity::class.java,
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -56,26 +63,24 @@ class MainActivity : AppCompatActivity() {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         var clickCount by remember { mutableStateOf(0) }
 
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("PTQBookPageView Demo", fontSize = 24.sp, modifier = Modifier.clickable {
-                                clickCount++
-                                if (clickCount % 7 == 0) {
-                                    Toast.makeText(ctx, "PTQ is Power", Toast.LENGTH_SHORT).show()
+                        LazyColumn(horizontalAlignment = Alignment.CenterHorizontally) {
+                            item {
+                                Text("PTQBookPageView Demo", fontSize = 24.sp, modifier = Modifier.clickable {
+                                    clickCount++
+                                    if (clickCount % 7 == 0) {
+                                        Toast.makeText(ctx, "PTQ is Power", Toast.LENGTH_SHORT).show()
+                                    }
+                                })
+
+                                pageRoute.entries.forEach { (pageName, activity) ->
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = { startActivity(Intent(this@MainActivity, activity)) }) {
+                                        Text(pageName, fontSize = 18.sp)
+                                    }
                                 }
-                            })
-                            Spacer(modifier = Modifier.height(10.dp))
-                            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { startActivity(Intent(this@MainActivity, NovelActivity::class.java)) }) {
-                                Text("小说", fontSize = 18.sp)
+
+                                Spacer(modifier = Modifier.height(30.dp))
                             }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { startActivity(Intent(this@MainActivity, AlbumActivity::class.java)) }) {
-                                Text("画册", fontSize = 18.sp)
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { startActivity(Intent(this@MainActivity, GalleryActivity::class.java)) }) {
-                                Text("画廊", fontSize = 18.sp)
-                            }
-                            Spacer(modifier = Modifier.height(30.dp))
                         }
                     }
                 }

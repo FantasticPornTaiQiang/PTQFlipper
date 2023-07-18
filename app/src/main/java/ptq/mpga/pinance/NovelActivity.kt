@@ -96,7 +96,7 @@ private val stickerList = arrayOf(
 private data class Sticker(val id: Int, val resourceId: Int, val page: Int, val offset: Offset, val size: Size)
 
 @Composable
-fun BoxScope.PTQView() {
+private fun BoxScope.PTQView() {
     val screenH = LocalConfiguration.current.screenHeightDp.dp
     val screenW = LocalConfiguration.current.screenWidthDp.dp
 
