@@ -68,7 +68,7 @@ Android JetPack Compose 仿真书籍翻页组件，支持自定义任何非动�
 - **请务必在 contents 的最末尾调用 refresh 方法以保证 View 显示的内容正常**
     - 例如需要网络请求图片，那么请在请求成功后手动refresh，把新内容同步到组件内
 - 在 contents 中利用回调参数 currentPage 设置**当前页显示的内容**
-- 在 contents 中，最外层是一个 fillMaxSize 的 Box，并需要使用 background 设置**当前纸页正面**的颜色（）
+- 在 contents 中，最外层是一个 fillMaxSize 的 Box，并需要使用 background 设置**当前纸页正面**的颜色
 - 在 contents 的 Box 中（即示例代码的注释处），**可以自定义任何非动态的内容**
 
 **注：不支持：**
